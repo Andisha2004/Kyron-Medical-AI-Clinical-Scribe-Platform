@@ -26,6 +26,9 @@ The frontend and backend run on an EC2 instance, while PostgreSQL is hosted on A
                            AI Service APIs
 ```
 
+<img width="1536" height="1024" alt="ChatGPT Image Jul 11, 2026, 06_23_55 PM" src="https://github.com/user-attachments/assets/1c3c83ed-85d3-48d8-954b-7a87ab9a1253" />
+
+
 ---
 
 # Components
