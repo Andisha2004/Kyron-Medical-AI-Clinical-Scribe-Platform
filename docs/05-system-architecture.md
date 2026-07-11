@@ -1,5 +1,8 @@
 # System Architecture
 
+<img width="1536" height="1024" alt="ChatGPT Image Jul 11, 2026, 06_05_29 PM" src="https://github.com/user-attachments/assets/ead8acbe-26bf-4078-b6fa-448d7dfcf495" />
+
+
 ## Overview
 
 The application follows a client-server architecture.
