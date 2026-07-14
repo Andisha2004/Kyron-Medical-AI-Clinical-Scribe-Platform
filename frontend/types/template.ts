@@ -12,3 +12,16 @@ export interface TemplateSummary {
   is_active: boolean;
   sections: TemplateSection[];
 }
+
+export interface TemplateSectionInput {
+  section: string;
+  instructions: string;
+  sort_order: number;
+}
+
+export interface TemplateMutationRequest {
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  sections: TemplateSectionInput[];
+}

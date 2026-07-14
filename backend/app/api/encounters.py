@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -12,6 +12,7 @@ from app.api.dependencies import (
     get_accessible_encounter,
     get_database_session,
     get_provider_owned_encounter,
+    require_admin,
     require_provider,
 )
 from app.clients.openai_client import AiClientError
@@ -39,6 +40,7 @@ from app.schemas.encounter import (
     SaveEncounterNoteRequest,
     SaveEncounterNoteResponse,
 )
+from app.schemas.admin import AdminEncounterListItemResponse, AdminEncounterListResponse
 from app.services.audit_service import AuditService
 from app.services.note_generation_service import (
     InsufficientClinicalContentError,
@@ -92,6 +94,67 @@ def chunk_text(value: str, chunk_size: int = 180) -> list[str]:
 @router.get("/status")
 async def encounters_status(_: User = Depends(require_provider)) -> dict[str, str]:
     return {"status": "authenticated"}
+
+
+@router.get("/admin/encounters", response_model=AdminEncounterListResponse)
+async def list_admin_encounters(
+    provider_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    page: int = 1,
+    page_size: int = 10,
+    _: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_database_session),
+) -> AdminEncounterListResponse:
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 50)
+
+    filters = []
+    if provider_id:
+        filters.append(Encounter.provider_id == provider_id)
+    if start_date:
+        filters.append(Encounter.encounter_date >= datetime.combine(start_date, time.min, tzinfo=UTC))
+    if end_date:
+        filters.append(Encounter.encounter_date <= datetime.combine(end_date, time.max, tzinfo=UTC))
+
+    total = await session.scalar(select(func.count(Encounter.id)).where(*filters))
+    encounters = (
+        await session.scalars(
+            select(Encounter)
+            .where(*filters)
+            .options(
+                selectinload(Encounter.patient),
+                selectinload(Encounter.provider).selectinload(User.provider_profile),
+                selectinload(Encounter.template),
+            )
+            .order_by(Encounter.updated_at.desc(), Encounter.encounter_date.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).unique().all()
+
+    return AdminEncounterListResponse(
+        items=[
+            AdminEncounterListItemResponse(
+                id=encounter.id,
+                provider_id=encounter.provider_id,
+                provider_name=(
+                    f"{encounter.provider.provider_profile.first_name} {encounter.provider.provider_profile.last_name}"
+                    if encounter.provider.provider_profile
+                    else encounter.provider.email
+                ),
+                patient_name=f"{encounter.patient.first_name} {encounter.patient.last_name}",
+                encounter_date=encounter.encounter_date,
+                status=encounter.status.value,
+                template_name=encounter.template.name,
+                updated_at=encounter.updated_at,
+            )
+            for encounter in encounters
+        ],
+        page=page,
+        page_size=page_size,
+        total=total or 0,
+    )
 
 
 @router.get("", response_model=ProviderDashboardResponse)
