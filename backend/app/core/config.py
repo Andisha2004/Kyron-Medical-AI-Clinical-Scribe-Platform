@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: float = 30.0
     openai_max_retries: int = 2
+    voice_provider: str = "openai_realtime"
+    openai_realtime_model: str = "gpt-realtime"
+    openai_realtime_voice: str = "alloy"
+    openai_realtime_session_url: str = "https://api.openai.com/v1/realtime/sessions"
+    openai_realtime_create_remote_session: bool = False
+    openai_realtime_transcription_model: str = "gpt-realtime-whisper"
+    openai_realtime_transcription_language: str = "en"
+    openai_realtime_transcription_delay: str = "low"
 
     anthropic_api_key: str = "replace_with_anthropic_api_key"
     anthropic_model: str = "claude-3-5-sonnet-latest"

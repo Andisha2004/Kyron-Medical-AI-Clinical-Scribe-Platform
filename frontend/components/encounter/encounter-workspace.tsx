@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DictationPanel } from "@/components/encounter/dictation-panel";
+import { VoiceEditPanel } from "@/components/encounter/voice-edit-panel";
 import { ApiError } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { getEncounterDetail, saveEncounterNote, updateEncounterDraft } from "@/lib/encounters";
@@ -581,6 +583,26 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
     );
   }
 
+  function handleRealtimeDraftApplied(response: {
+    draft: EncounterDraftResponse;
+    draft_revision: number;
+  }) {
+    setDraft(draftFromResponse(response.draft));
+    setBaseRevision(response.draft_revision);
+    setIsDirty(false);
+    setSaveState("saved");
+    setConflictDraft(null);
+    setEncounter((current) =>
+      current
+        ? {
+            ...current,
+            draft: response.draft,
+          }
+        : current,
+    );
+    setErrorMessage(null);
+  }
+
   const comparisonVersion =
     comparisonVersionId && selectedVersion
       ? (versions.find((version) => version.id === comparisonVersionId) ?? null)
@@ -757,13 +779,24 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
             />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="font-semibold text-slate-950">Dictation and voice controls</h2>
-            <p className="mt-3 text-sm text-slate-600">
-              Live dictation and voice editing will be connected in the next phases. This workspace
-              already persists transcript, ICD-10 selections, and SOAP edits safely.
-            </p>
-          </div>
+          {publicEnv.enableVoiceAgent ? (
+            <VoiceEditPanel
+              encounterId={encounterId}
+              draft={draft}
+              baseRevision={baseRevision}
+              onDraftApplied={handleRealtimeDraftApplied}
+              onError={setErrorMessage}
+            />
+          ) : null}
+
+          {publicEnv.enableRealtimeTranscript ? (
+            <DictationPanel
+              encounterId={encounterId}
+              baseRevision={baseRevision}
+              onDraftApplied={handleRealtimeDraftApplied}
+              onError={setErrorMessage}
+            />
+          ) : null}
         </section>
 
         <section className="space-y-6">
