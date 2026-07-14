@@ -1029,11 +1029,11 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+        <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
           <div className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-semibold text-slate-950">Capture encounter source</h2>
+                <h2 className="font-semibold text-slate-950">Encounter source</h2>
                 <StatusBadge label="Step 1" status="neutral" />
               </div>
               <p className="mt-2 text-sm text-slate-600">
@@ -1053,8 +1053,9 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                   placeholder="Paste or type the encounter transcript here. This can come from manual typing or live dictation."
                 />
                 <p className="mt-2 text-sm text-slate-500">
-                  The transcript captures what was said during the visit. Voice editing does not
-                  create the transcript; it only revises the SOAP note later.
+                  The transcript is text-based. Providers can type it, paste already-transcribed
+                  notes, or use live dictation. PDF upload is not part of the current transcript
+                  workflow.
                 </p>
               </div>
 
@@ -1092,6 +1093,201 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                   placeholder="Example: BP 138/86, lungs clear, no respiratory distress, mild pharyngeal erythema."
                 />
               </div>
+            </div>
+
+            <div
+              className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+              data-testid="version-history-panel"
+            >
+              <h2 className="font-semibold text-slate-950">Version history</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Save note version creates a formal checkpoint. Autosave protects the draft, but it
+                does not create a permanent historical record.
+              </p>
+
+              {versions.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-600">
+                  No note versions saved yet. Save the note once you want a formal checkpoint.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  <div className="space-y-3">
+                    {versions.map((version) => (
+                      <button
+                        key={version.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVersion(version);
+                        }}
+                        className={`block w-full rounded-lg border px-4 py-3 text-left ${
+                          selectedVersion?.id === version.id
+                            ? "border-slate-900 bg-slate-100"
+                            : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <p className="text-sm font-semibold text-slate-900">
+                          Version {version.version_number}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Saved {formatDateTime(version.saved_at)} by {renderVersionAuthor(version)}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedVersion ? (
+                    <div
+                      className="rounded-lg border border-slate-200 bg-white p-4"
+                      data-testid="selected-version-details"
+                    >
+                      <h3
+                        className="font-semibold text-slate-950"
+                        data-testid="selected-version-heading"
+                      >
+                        Version {selectedVersion.version_number} details
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Saved {formatDateTime(selectedVersion.saved_at)} by{" "}
+                        {renderVersionAuthor(selectedVersion)}
+                      </p>
+                      {[
+                        {
+                          label: "Subjective",
+                          value: selectedVersion.subjective,
+                          testId: "selected-version-subjective",
+                        },
+                        {
+                          label: "Objective",
+                          value: selectedVersion.objective,
+                          testId: "selected-version-objective",
+                        },
+                        {
+                          label: "Assessment",
+                          value: selectedVersion.assessment,
+                          testId: "selected-version-assessment",
+                        },
+                        {
+                          label: "Plan",
+                          value: selectedVersion.plan,
+                          testId: "selected-version-plan",
+                        },
+                      ].map(({ label, value, testId }) => (
+                        <div key={label} className="mt-4" data-testid={testId}>
+                          <p className="text-sm font-semibold text-slate-800">{label}</p>
+                          <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap text-slate-700">
+                            {value || "No content saved for this section."}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="mt-4">
+                        <p className="text-sm font-semibold text-slate-800">ICD-10 codes</p>
+                        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                          {selectedVersion.icd10_codes && selectedVersion.icd10_codes.length > 0 ? (
+                            <div className="space-y-2">
+                              {selectedVersion.icd10_codes.map((codeEntry) => (
+                                <div key={codeEntry.code}>
+                                  <span className="font-semibold">{codeEntry.code}</span>
+                                  {codeEntry.description ? ` — ${codeEntry.description}` : ""}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            "No ICD-10 codes saved for this version."
+                          )}
+                        </div>
+                      </div>
+
+                      {versions.length > 1 ? (
+                        <div className="mt-6 border-t border-slate-200 pt-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h4 className="text-sm font-semibold text-slate-900">
+                                Version comparison
+                              </h4>
+                              <p className="mt-1 text-sm text-slate-600">
+                                Compare this saved version against another version.
+                              </p>
+                            </div>
+
+                            <div className="min-w-64">
+                              <label
+                                htmlFor="comparison-version"
+                                className="block text-sm font-semibold text-slate-800"
+                              >
+                                Compare against
+                              </label>
+                              <select
+                                id="comparison-version"
+                                value={comparisonVersionId}
+                                onChange={(event) => setComparisonVersionId(event.target.value)}
+                                data-testid="version-compare-select"
+                                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                              >
+                                {versions
+                                  .filter((version) => version.id !== selectedVersion.id)
+                                  .map((version) => (
+                                    <option key={version.id} value={version.id}>
+                                      Version {version.version_number} •{" "}
+                                      {formatDateTime(version.saved_at)}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {comparisonVersion ? (
+                            <div className="mt-4 space-y-4">
+                              {comparisonSections.map((section) => (
+                                <div
+                                  key={section.label}
+                                  data-testid={`version-diff-${section.label.toLowerCase()}`}
+                                  className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                >
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {section.label}
+                                  </p>
+
+                                  {!section.changed ? (
+                                    <p className="mt-2 text-sm text-slate-600">
+                                      No changes between these versions for this section.
+                                    </p>
+                                  ) : (
+                                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                                      <div>
+                                        <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
+                                          Removed
+                                        </p>
+                                        <div
+                                          className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm whitespace-pre-wrap text-red-900"
+                                          data-testid={`version-diff-${section.label.toLowerCase()}-removed`}
+                                        >
+                                          {section.removed || "No removed content."}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold tracking-wide text-emerald-700 uppercase">
+                                          Added
+                                        </p>
+                                        <div
+                                          className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap text-emerald-900"
+                                          data-testid={`version-diff-${section.label.toLowerCase()}-added`}
+                                        >
+                                          {section.added || "No added content."}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1280,201 +1476,6 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
               ) : null}
             </div>
           </div>
-        </div>
-
-        <div
-          className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-          data-testid="version-history-panel"
-        >
-          <h2 className="font-semibold text-slate-950">Version history</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            A version is created only when you press Save note version. Autosave protects the draft,
-            but it does not create a permanent historical record.
-          </p>
-
-          {versions.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-600">
-              No note versions saved yet. Save the note once you want a formal checkpoint.
-            </p>
-          ) : (
-            <div className="mt-4 space-y-4">
-              <div className="space-y-3">
-                {versions.map((version) => (
-                  <button
-                    key={version.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedVersion(version);
-                    }}
-                    className={`block w-full rounded-lg border px-4 py-3 text-left ${
-                      selectedVersion?.id === version.id
-                        ? "border-slate-900 bg-slate-100"
-                        : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold text-slate-900">
-                      Version {version.version_number}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Saved {formatDateTime(version.saved_at)} by {renderVersionAuthor(version)}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              {selectedVersion ? (
-                <div
-                  className="rounded-lg border border-slate-200 bg-white p-4"
-                  data-testid="selected-version-details"
-                >
-                  <h3
-                    className="font-semibold text-slate-950"
-                    data-testid="selected-version-heading"
-                  >
-                    Version {selectedVersion.version_number} details
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Saved {formatDateTime(selectedVersion.saved_at)} by{" "}
-                    {renderVersionAuthor(selectedVersion)}
-                  </p>
-                  {[
-                    {
-                      label: "Subjective",
-                      value: selectedVersion.subjective,
-                      testId: "selected-version-subjective",
-                    },
-                    {
-                      label: "Objective",
-                      value: selectedVersion.objective,
-                      testId: "selected-version-objective",
-                    },
-                    {
-                      label: "Assessment",
-                      value: selectedVersion.assessment,
-                      testId: "selected-version-assessment",
-                    },
-                    {
-                      label: "Plan",
-                      value: selectedVersion.plan,
-                      testId: "selected-version-plan",
-                    },
-                  ].map(({ label, value, testId }) => (
-                    <div key={label} className="mt-4" data-testid={testId}>
-                      <p className="text-sm font-semibold text-slate-800">{label}</p>
-                      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap text-slate-700">
-                        {value || "No content saved for this section."}
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="mt-4">
-                    <p className="text-sm font-semibold text-slate-800">ICD-10 codes</p>
-                    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      {selectedVersion.icd10_codes && selectedVersion.icd10_codes.length > 0 ? (
-                        <div className="space-y-2">
-                          {selectedVersion.icd10_codes.map((codeEntry) => (
-                            <div key={codeEntry.code}>
-                              <span className="font-semibold">{codeEntry.code}</span>
-                              {codeEntry.description ? ` — ${codeEntry.description}` : ""}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        "No ICD-10 codes saved for this version."
-                      )}
-                    </div>
-                  </div>
-
-                  {versions.length > 1 ? (
-                    <div className="mt-6 border-t border-slate-200 pt-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-900">
-                            Version comparison
-                          </h4>
-                          <p className="mt-1 text-sm text-slate-600">
-                            Compare this saved version against another version.
-                          </p>
-                        </div>
-
-                        <div className="min-w-64">
-                          <label
-                            htmlFor="comparison-version"
-                            className="block text-sm font-semibold text-slate-800"
-                          >
-                            Compare against
-                          </label>
-                          <select
-                            id="comparison-version"
-                            value={comparisonVersionId}
-                            onChange={(event) => setComparisonVersionId(event.target.value)}
-                            data-testid="version-compare-select"
-                            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                          >
-                            {versions
-                              .filter((version) => version.id !== selectedVersion.id)
-                              .map((version) => (
-                                <option key={version.id} value={version.id}>
-                                  Version {version.version_number} •{" "}
-                                  {formatDateTime(version.saved_at)}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {comparisonVersion ? (
-                        <div className="mt-4 space-y-4">
-                          {comparisonSections.map((section) => (
-                            <div
-                              key={section.label}
-                              data-testid={`version-diff-${section.label.toLowerCase()}`}
-                              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
-                            >
-                              <p className="text-sm font-semibold text-slate-900">
-                                {section.label}
-                              </p>
-
-                              {!section.changed ? (
-                                <p className="mt-2 text-sm text-slate-600">
-                                  No changes between these versions for this section.
-                                </p>
-                              ) : (
-                                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                                  <div>
-                                    <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
-                                      Removed
-                                    </p>
-                                    <div
-                                      className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm whitespace-pre-wrap text-red-900"
-                                      data-testid={`version-diff-${section.label.toLowerCase()}-removed`}
-                                    >
-                                      {section.removed || "No removed content."}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold tracking-wide text-emerald-700 uppercase">
-                                      Added
-                                    </p>
-                                    <div
-                                      className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap text-emerald-900"
-                                      data-testid={`version-diff-${section.label.toLowerCase()}-added`}
-                                    >
-                                      {section.added || "No added content."}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          )}
         </div>
       </div>
     </div>

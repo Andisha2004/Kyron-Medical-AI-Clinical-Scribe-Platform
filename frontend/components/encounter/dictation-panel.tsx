@@ -362,52 +362,39 @@ export function DictationPanel({
   }
 
   return (
-    <div
-      className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="dictation-panel"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-semibold text-slate-950">Live dictation</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Optional. Use this when you want to speak the transcript instead of typing it. Finalized
-            speech is appended to the transcript and can help update the SOAP draft gradually.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => void startDictation()}
-            disabled={dictationState === "starting" || dictationState === "listening"}
-            data-testid="dictation-start-button"
-          >
-            {dictationState === "starting" ? "Starting..." : "Start"}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={pauseDictation}
-            disabled={dictationState !== "listening"}
-            data-testid="dictation-pause-button"
-          >
-            Pause
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => void resumeDictation()}
-            disabled={dictationState !== "paused"}
-            data-testid="dictation-resume-button"
-          >
-            Resume
-          </Button>
-          <Button
-            onClick={() => void stopDictation()}
-            disabled={dictationState === "idle"}
-            data-testid="dictation-stop-button"
-          >
-            Stop
-          </Button>
-        </div>
+    <div className="space-y-4" data-testid="dictation-panel">
+      <div className="flex flex-wrap gap-3">
+        <Button
+          variant="secondary"
+          onClick={() => void startDictation()}
+          disabled={dictationState === "starting" || dictationState === "listening"}
+          data-testid="dictation-start-button"
+        >
+          {dictationState === "starting" ? "Starting..." : "Start dictation"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={pauseDictation}
+          disabled={dictationState !== "listening"}
+          data-testid="dictation-pause-button"
+        >
+          Pause
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => void resumeDictation()}
+          disabled={dictationState !== "paused"}
+          data-testid="dictation-resume-button"
+        >
+          Resume
+        </Button>
+        <Button
+          onClick={() => void stopDictation()}
+          disabled={dictationState === "idle"}
+          data-testid="dictation-stop-button"
+        >
+          Stop
+        </Button>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -415,12 +402,7 @@ export function DictationPanel({
           <p className="text-sm font-semibold text-slate-800">Session status</p>
           <p className="mt-2 text-sm text-slate-600">
             {sessionInfo?.message ??
-              "Dictation is not connected to a realtime transcription provider yet. You can still test it with the microphone flow or the manual segment box."}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            {sessionInfo
-              ? `${sessionInfo.provider} • ${sessionInfo.connection_method} • ${sessionInfo.model}`
-              : "Dictation session not initialized yet."}
+              "Live transcription is not configured yet. You can still type the transcript or add finalized segments manually."}
           </p>
           <p
             className="mt-2 text-xs text-slate-500"
@@ -451,7 +433,7 @@ export function DictationPanel({
             htmlFor="manual-dictation-segment"
             className="block text-sm font-semibold text-slate-800"
           >
-            Type a transcript segment instead
+            Add a transcript segment manually
           </label>
           <textarea
             id="manual-dictation-segment"

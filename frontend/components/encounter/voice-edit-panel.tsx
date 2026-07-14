@@ -223,37 +223,24 @@ export function VoiceEditPanel({
     .join(" • ");
 
   return (
-    <div
-      className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="voice-edit-panel"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-semibold text-slate-950">Voice editing</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Optional. Use short commands to revise the SOAP note after you already have some note
-            text. If microphone voice editing is unavailable, use the manual command box below.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => void startVoiceEditing()}
-            disabled={isSessionStarting || isListening}
-            data-testid="voice-start-button"
-          >
-            {isSessionStarting ? "Starting..." : "Start Voice Editing"}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={stopVoiceEditing}
-            disabled={!isListening}
-            data-testid="voice-stop-button"
-          >
-            Stop Voice Editing
-          </Button>
-        </div>
+    <div className="space-y-4" data-testid="voice-edit-panel">
+      <div className="flex flex-wrap gap-3">
+        <Button
+          variant="secondary"
+          onClick={() => void startVoiceEditing()}
+          disabled={isSessionStarting || isListening}
+          data-testid="voice-start-button"
+        >
+          {isSessionStarting ? "Starting..." : "Start voice editing"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={stopVoiceEditing}
+          disabled={!isListening}
+          data-testid="voice-stop-button"
+        >
+          Stop voice editing
+        </Button>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -261,12 +248,7 @@ export function VoiceEditPanel({
           <p className="text-sm font-semibold text-slate-800">Session status</p>
           <p className="mt-2 text-sm text-slate-600">
             {voiceSession?.message ??
-              "Voice editing is not connected to a realtime provider yet. You can still test it with the manual command box."}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            {voiceSession
-              ? `${voiceSession.provider} • ${voiceSession.connection_method} • ${voiceSession.model}`
-              : "Realtime provider not initialized."}
+              "Voice editing is not configured yet. You can still test note edits with the manual command box."}
           </p>
           <p
             className="mt-2 text-xs text-slate-500"
@@ -310,7 +292,7 @@ export function VoiceEditPanel({
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <label htmlFor="voice-command" className="block text-sm font-semibold text-slate-800">
-            Type a command instead
+            Enter a command manually
           </label>
           <textarea
             id="voice-command"
