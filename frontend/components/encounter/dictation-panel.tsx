@@ -370,8 +370,8 @@ export function DictationPanel({
         <div>
           <h2 className="font-semibold text-slate-950">Live dictation</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Dictation updates the transcript immediately, sends only finalized segments to the
-            backend, and applies the smallest SOAP patch possible for each synced segment.
+            Optional. Use this when you want to speak the transcript instead of typing it. Finalized
+            speech is appended to the transcript and can help update the SOAP draft gradually.
           </p>
         </div>
 
@@ -415,7 +415,7 @@ export function DictationPanel({
           <p className="text-sm font-semibold text-slate-800">Session status</p>
           <p className="mt-2 text-sm text-slate-600">
             {sessionInfo?.message ??
-              "OpenAI Realtime transcription is the selected architecture. The local workflow uses browser speech recognition as a development-safe microphone path."}
+              "Dictation is not connected to a realtime transcription provider yet. You can still test it with the microphone flow or the manual segment box."}
           </p>
           <p className="mt-2 text-xs text-slate-500">
             {sessionInfo
@@ -451,7 +451,7 @@ export function DictationPanel({
             htmlFor="manual-dictation-segment"
             className="block text-sm font-semibold text-slate-800"
           >
-            Manual segment fallback
+            Type a transcript segment instead
           </label>
           <textarea
             id="manual-dictation-segment"

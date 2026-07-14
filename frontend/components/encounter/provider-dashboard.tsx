@@ -72,7 +72,7 @@ export function ProviderDashboard() {
           <Link
             href="/provider/encounters/new"
             data-testid="new-encounter-link"
-            className="inline-flex min-h-10 items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+            className="inline-flex min-h-10 items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold !text-white shadow-sm hover:bg-slate-700"
           >
             New encounter
           </Link>

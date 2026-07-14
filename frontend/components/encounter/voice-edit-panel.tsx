@@ -231,9 +231,8 @@ export function VoiceEditPanel({
         <div>
           <h2 className="font-semibold text-slate-950">Voice editing</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Spoken commands are interpreted as validated note patch operations. The backend loads
-            the current draft before applying each change, so the model path never edits the note
-            blindly.
+            Optional. Use short commands to revise the SOAP note after you already have some note
+            text. If microphone voice editing is unavailable, use the manual command box below.
           </p>
         </div>
 
@@ -262,12 +261,12 @@ export function VoiceEditPanel({
           <p className="text-sm font-semibold text-slate-800">Session status</p>
           <p className="mt-2 text-sm text-slate-600">
             {voiceSession?.message ??
-              "OpenAI Realtime is the selected architecture. The local UI uses browser speech recognition as a safe development fallback."}
+              "Voice editing is not connected to a realtime provider yet. You can still test it with the manual command box."}
           </p>
           <p className="mt-2 text-xs text-slate-500">
             {voiceSession
               ? `${voiceSession.provider} • ${voiceSession.connection_method} • ${voiceSession.model}`
-              : "Realtime provider not initialized yet."}
+              : "Realtime provider not initialized."}
           </p>
           <p
             className="mt-2 text-xs text-slate-500"
@@ -311,7 +310,7 @@ export function VoiceEditPanel({
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <label htmlFor="voice-command" className="block text-sm font-semibold text-slate-800">
-            Manual command fallback
+            Type a command instead
           </label>
           <textarea
             id="voice-command"
