@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,6 +26,14 @@ import type { NoteVersion } from "@/types/note";
 import type { TemplateSummary } from "@/types/template";
 
 type SaveState = "loading" | "idle" | "saving" | "saved" | "error" | "conflict";
+
+interface SaveRecoverySnapshot {
+  encounterId: string;
+  draft: DraftState;
+  baseRevision: number | null;
+  idempotencyKey: string;
+  savedAt: string;
+}
 
 const emptyDraftState: DraftState = {
   transcript: "",
@@ -141,11 +149,32 @@ function statusLabel(
   return { label: "Draft", status: "neutral" };
 }
 
+function recoveryStorageKey(encounterId: string): string {
+  return `kyron:save-recovery:${encounterId}`;
+}
+
+function isDeactivatedApiError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 403 &&
+    error.message.toLowerCase().includes("deactivated")
+  );
+}
+
+function isExpiredApiError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 401 &&
+    error.message.toLowerCase().includes("expired")
+  );
+}
+
 interface EncounterWorkspaceProps {
   encounterId: string;
 }
 
 export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [encounter, setEncounter] = useState<EncounterDetailResponse | null>(null);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
@@ -167,8 +196,14 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
   const [icdResults, setIcdResults] = useState<IcdSearchResult[]>([]);
   const [isSearchingIcd, setIsSearchingIcd] = useState(false);
   const [icdSearchError, setIcdSearchError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [accountDeactivated, setAccountDeactivated] = useState(false);
+  const [saveRecovery, setSaveRecovery] = useState<SaveRecoverySnapshot | null>(null);
+  const [isRetryingRecoveredSave, setIsRetryingRecoveredSave] = useState(false);
   const hasLoadedInitialData = useRef(false);
   const lastSaveIdempotencyKeyRef = useRef<string | null>(null);
+  const generationDraftBackupRef = useRef<DraftState | null>(null);
+  const generationReceivedContentRef = useRef(false);
 
   const flashMessage = useMemo(() => {
     if (searchParams.get("created") !== "1") {
@@ -185,6 +220,22 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
 
     return "Encounter created. New patient record and empty draft are ready.";
   }, [searchParams]);
+
+  function persistSaveRecovery(snapshot: SaveRecoverySnapshot) {
+    window.localStorage.setItem(recoveryStorageKey(encounterId), JSON.stringify(snapshot));
+    setSaveRecovery(snapshot);
+  }
+
+  function clearSaveRecovery() {
+    window.localStorage.removeItem(recoveryStorageKey(encounterId));
+    setSaveRecovery(null);
+  }
+
+  function routeToLoginForRecovery(reason: "expired" | "deactivated") {
+    router.replace(
+      `/login?next=${encodeURIComponent(`/provider/encounters/${encounterId}`)}&reason=${reason}`,
+    );
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -204,6 +255,8 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         setTemplates(templateResponse);
         setDraft(draftFromResponse(encounterResponse.draft));
         setBaseRevision(encounterResponse.draft?.draft_revision ?? null);
+        setSessionExpired(false);
+        setAccountDeactivated(false);
         if (encounterResponse.note_id) {
           const versionResponse = await getNoteVersions(encounterResponse.note_id);
           if (isMounted) {
@@ -220,6 +273,25 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         setSaveState("idle");
         setErrorMessage(null);
         setConflictDraft(null);
+        const recoveryValue = window.localStorage.getItem(recoveryStorageKey(encounterId));
+        if (recoveryValue) {
+          try {
+            const parsedRecovery = JSON.parse(recoveryValue) as SaveRecoverySnapshot;
+            if (parsedRecovery.encounterId === encounterId) {
+              setDraft(parsedRecovery.draft);
+              setBaseRevision(parsedRecovery.baseRevision);
+              lastSaveIdempotencyKeyRef.current = parsedRecovery.idempotencyKey;
+              setSaveRecovery(parsedRecovery);
+              setIsDirty(true);
+              setSaveState("idle");
+              setErrorMessage(
+                "Your session expired during save. Your latest note state was restored locally. Sign in again and retry the save.",
+              );
+            }
+          } catch {
+            window.localStorage.removeItem(recoveryStorageKey(encounterId));
+          }
+        }
         hasLoadedInitialData.current = true;
       } catch (error) {
         if (!isMounted) {
@@ -227,6 +299,20 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         }
 
         if (error instanceof ApiError) {
+          if (isExpiredApiError(error)) {
+            setSessionExpired(true);
+            setErrorMessage("Your session expired. Sign in again to continue.");
+            setSaveState("error");
+            return;
+          }
+          if (isDeactivatedApiError(error)) {
+            setAccountDeactivated(true);
+            setErrorMessage(
+              "Your account has been deactivated. Your current draft remains available locally, but protected actions are blocked.",
+            );
+            setSaveState("error");
+            return;
+          }
           if (error.status === 404) {
             setErrorMessage("The requested encounter could not be found.");
           } else if (error.status === 403) {
@@ -251,7 +337,13 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
   }, [encounterId]);
 
   useEffect(() => {
-    if (!hasLoadedInitialData.current || !isDirty || saveState === "conflict") {
+    if (
+      !hasLoadedInitialData.current ||
+      !isDirty ||
+      saveState === "conflict" ||
+      sessionExpired ||
+      accountDeactivated
+    ) {
       return;
     }
 
@@ -276,6 +368,22 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
             : current,
         );
       } catch (error) {
+        if (isExpiredApiError(error)) {
+          setSessionExpired(true);
+          setErrorMessage("Your session expired. Sign in again to continue saving.");
+          setSaveState("error");
+          return;
+        }
+
+        if (isDeactivatedApiError(error)) {
+          setAccountDeactivated(true);
+          setErrorMessage(
+            "Your account has been deactivated. Automatic saving has been stopped, and your current draft remains in this browser.",
+          );
+          setSaveState("error");
+          return;
+        }
+
         if (error instanceof ApiError && error.status === 409) {
           const latestDraft = error.body?.errors?.latest_draft as
             EncounterDraftResponse | undefined;
@@ -293,7 +401,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [baseRevision, draft, encounterId, isDirty, saveState]);
+  }, [accountDeactivated, baseRevision, draft, encounterId, isDirty, saveState, sessionExpired]);
 
   useEffect(() => {
     if (!publicEnv.enableIcdSearch) {
@@ -429,7 +537,33 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
       });
       await refreshEncounterDetails();
       lastSaveIdempotencyKeyRef.current = null;
+      clearSaveRecovery();
     } catch (error) {
+      if (isExpiredApiError(error)) {
+        const recoverySnapshot: SaveRecoverySnapshot = {
+          encounterId,
+          draft,
+          baseRevision,
+          idempotencyKey,
+          savedAt: new Date().toISOString(),
+        };
+        persistSaveRecovery(recoverySnapshot);
+        setSessionExpired(true);
+        setErrorMessage(
+          "Your session expired. Your work has not been lost. Sign in again to retry the save.",
+        );
+        routeToLoginForRecovery("expired");
+        return;
+      }
+
+      if (isDeactivatedApiError(error)) {
+        setAccountDeactivated(true);
+        setErrorMessage(
+          "Your account has been deactivated. Your draft remains visible here, but saving is blocked.",
+        );
+        return;
+      }
+
       if (error instanceof ApiError) {
         setErrorMessage(error.message);
       } else if (error instanceof Error) {
@@ -442,12 +576,71 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
     }
   }
 
+  async function handleRetryRecoveredSave() {
+    if (!saveRecovery) {
+      return;
+    }
+
+    setIsRetryingRecoveredSave(true);
+    setErrorMessage(null);
+    try {
+      await saveEncounterNote(encounterId, {
+        subjective: saveRecovery.draft.subjective,
+        objective: saveRecovery.draft.objective,
+        assessment: saveRecovery.draft.assessment,
+        plan: saveRecovery.draft.plan,
+        icd10_codes: saveRecovery.draft.selected_icd10_codes,
+        idempotency_key: saveRecovery.idempotencyKey,
+        generation_metadata: {
+          source: "phase11_recovered_save_retry",
+          recovered_at: saveRecovery.savedAt,
+        },
+      });
+      await refreshEncounterDetails();
+      lastSaveIdempotencyKeyRef.current = null;
+      clearSaveRecovery();
+      setSessionExpired(false);
+    } catch (error) {
+      if (isExpiredApiError(error)) {
+        setSessionExpired(true);
+        setErrorMessage("Your session is still expired. Sign in again before retrying the save.");
+        routeToLoginForRecovery("expired");
+        return;
+      }
+      if (isDeactivatedApiError(error)) {
+        setAccountDeactivated(true);
+        setErrorMessage("Your account has been deactivated. The recovered note cannot be saved.");
+        return;
+      }
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to retry the recovered save.",
+      );
+    } finally {
+      setIsRetryingRecoveredSave(false);
+    }
+  }
+
   async function handleGenerateNote() {
+    if (accountDeactivated) {
+      setErrorMessage("Your account has been deactivated. Note generation is unavailable.");
+      return;
+    }
+
     setIsGenerating(true);
     setErrorMessage(null);
     setGenerationWarnings([]);
     setMissingInformation([]);
     setGenerationStatusMessage("Starting note generation...");
+    generationDraftBackupRef.current = {
+      transcript: draft.transcript,
+      observations: draft.observations,
+      subjective: draft.subjective,
+      objective: draft.objective,
+      assessment: draft.assessment,
+      plan: draft.plan,
+      selected_icd10_codes: [...draft.selected_icd10_codes],
+    };
+    generationReceivedContentRef.current = false;
 
     try {
       await streamJsonEvents<{ [key: string]: unknown }>(
@@ -462,20 +655,23 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         (streamEvent) => {
           if (streamEvent.event === "generation_started") {
             lastSaveIdempotencyKeyRef.current = null;
-            setDraft((current) => ({
-              ...current,
-              subjective: "",
-              objective: "",
-              assessment: "",
-              plan: "",
-              selected_icd10_codes: [],
-            }));
             setGenerationStatusMessage("Generating SOAP note...");
             return;
           }
 
           if (streamEvent.event === "section_delta") {
             const data = streamEvent.data as unknown as GenerationEventDataMap["section_delta"];
+            if (!generationReceivedContentRef.current) {
+              generationReceivedContentRef.current = true;
+              setDraft((current) => ({
+                ...current,
+                subjective: "",
+                objective: "",
+                assessment: "",
+                plan: "",
+                selected_icd10_codes: [],
+              }));
+            }
             setDraft((current) => ({
               ...current,
               [data.section]: `${current[data.section]}${data.text}`,
@@ -526,12 +722,18 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
 
           if (streamEvent.event === "generation_error") {
             const data = streamEvent.data as unknown as GenerationEventDataMap["generation_error"];
+            if (generationDraftBackupRef.current) {
+              setDraft(generationDraftBackupRef.current);
+            }
             setErrorMessage(data.message);
             setGenerationStatusMessage("Generation failed.");
           }
         },
       );
     } catch (error) {
+      if (generationDraftBackupRef.current) {
+        setDraft(generationDraftBackupRef.current);
+      }
       if (error instanceof Error) {
         setErrorMessage(error.message);
       } else {
@@ -539,6 +741,8 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
       }
       setGenerationStatusMessage("Generation failed.");
     } finally {
+      generationDraftBackupRef.current = null;
+      generationReceivedContentRef.current = false;
       setIsGenerating(false);
     }
   }
@@ -601,6 +805,8 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         : current,
     );
     setErrorMessage(null);
+    setSessionExpired(false);
+    setAccountDeactivated(false);
   }
 
   const comparisonVersion =
@@ -724,6 +930,43 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         </div>
       ) : null}
 
+      {saveRecovery ? (
+        <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-900">
+          <p className="font-semibold">Recovered save available</p>
+          <p className="mt-1">
+            A previous save attempt was interrupted after your session expired. Your latest note
+            state was restored locally from {formatDateTime(saveRecovery.savedAt)}.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button
+              onClick={() => void handleRetryRecoveredSave()}
+              disabled={isRetryingRecoveredSave}
+            >
+              {isRetryingRecoveredSave ? "Retrying save..." : "Retry recovered save"}
+            </Button>
+            <Button variant="secondary" onClick={clearSaveRecovery}>
+              Dismiss recovery copy
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {accountDeactivated ? (
+        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
+          <p className="font-semibold">Account deactivated</p>
+          <p className="mt-1">
+            Your provider account was deactivated while this draft was open. Your current text has
+            been preserved in this browser, but protected actions such as saving, generating, voice
+            editing, and dictation are blocked.
+          </p>
+          <div className="mt-4">
+            <Button variant="secondary" onClick={() => routeToLoginForRecovery("deactivated")}>
+              Return to sign in
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_1fr]">
         <section className="space-y-6">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -765,6 +1008,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
               rows={10}
               value={draft.transcript}
               onChange={(event) => updateField("transcript", event.target.value)}
+              disabled={accountDeactivated}
               className="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
               placeholder="Paste or type the encounter transcript here."
             />
@@ -774,12 +1018,13 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
               rows={6}
               value={draft.observations}
               onChange={(event) => updateField("observations", event.target.value)}
+              disabled={accountDeactivated}
               className="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
               placeholder="Add non-transcript clinical observations here."
             />
           </div>
 
-          {publicEnv.enableVoiceAgent ? (
+          {publicEnv.enableVoiceAgent && !accountDeactivated ? (
             <VoiceEditPanel
               encounterId={encounterId}
               draft={draft}
@@ -789,7 +1034,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
             />
           ) : null}
 
-          {publicEnv.enableRealtimeTranscript ? (
+          {publicEnv.enableRealtimeTranscript && !accountDeactivated ? (
             <DictationPanel
               encounterId={encounterId}
               baseRevision={baseRevision}
@@ -807,11 +1052,14 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                 <Button
                   variant="secondary"
                   onClick={() => void handleGenerateNote()}
-                  disabled={isGenerating}
+                  disabled={isGenerating || accountDeactivated}
                 >
                   {isGenerating ? "Generating..." : "Generate SOAP note"}
                 </Button>
-                <Button onClick={() => void handleSaveNote()} disabled={isSavingNote}>
+                <Button
+                  onClick={() => void handleSaveNote()}
+                  disabled={isSavingNote || accountDeactivated}
+                >
                   {isSavingNote ? "Saving note..." : "Save note version"}
                 </Button>
               </div>
@@ -824,6 +1072,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                   rows={rows}
                   value={draft[field]}
                   onChange={(event) => updateField(field, event.target.value)}
+                  disabled={accountDeactivated}
                   className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
                   placeholder={`Enter ${label.toLowerCase()} content.`}
                 />
@@ -853,6 +1102,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                         variant="secondary"
                         className="shrink-0"
                         onClick={() => removeSelectedIcdCode(codeEntry.code)}
+                        disabled={accountDeactivated}
                       >
                         Remove
                       </Button>
@@ -880,6 +1130,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                   type="text"
                   value={icdQuery}
                   onChange={(event) => setIcdQuery(event.target.value)}
+                  disabled={accountDeactivated}
                   placeholder="Search ICD-10 codes"
                   className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
                 />
@@ -926,7 +1177,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                           variant={isAlreadySelected ? "secondary" : "primary"}
                           className="shrink-0"
                           onClick={() => addSelectedIcdCode(result)}
-                          disabled={isAlreadySelected}
+                          disabled={isAlreadySelected || accountDeactivated}
                         >
                           {isAlreadySelected ? "Added" : "Add to assessment"}
                         </Button>

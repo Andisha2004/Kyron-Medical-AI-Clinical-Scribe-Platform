@@ -100,10 +100,15 @@ class OpenAIClinicalScribeClient:
                 content = body["choices"][0]["message"]["content"]
                 parsed = json.loads(content)
                 return SoapNoteGenerationResult.model_validate(parsed)
+            except httpx.TimeoutException as exc:
+                last_error = exc
             except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
 
-        raise AiClientError(f"SOAP generation request failed: {last_error}")
+        if isinstance(last_error, httpx.TimeoutException):
+            raise AiClientError("The AI note generation service timed out. Please retry.")
+
+        raise AiClientError("The AI note generation service is unavailable right now. Please retry.")
 
 
 def get_openai_clinical_scribe_client() -> OpenAIClinicalScribeClient:

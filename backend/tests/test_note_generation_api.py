@@ -17,6 +17,7 @@ from app.db.models.user import User
 from app.schemas.generation import AssessmentItem, SoapNoteGenerationResult
 from app.services.note_generation_service import NoteGenerationService, get_note_generation_service
 from app.services.patient_history_service import PatientHistoryService
+from app.clients.openai_client import AiClientError
 
 
 class FakeClinicalScribeClient:
@@ -59,6 +60,11 @@ class FakeClinicalScribeClient:
             missing_information=[],
             warnings=[],
         )
+
+
+class FailingClinicalScribeClient:
+    async def generate_soap_note(self, *, system_prompt: str, user_prompt: str) -> SoapNoteGenerationResult:
+        raise AiClientError("The AI note generation service timed out. Please retry.")
 
 
 def create_user(email: str, role: UserRole) -> User:
@@ -334,5 +340,73 @@ async def test_generation_rejects_meaningless_content(client, db_session) -> Non
     updated_draft = await db_session.scalar(select(EncounterDraft).where(EncounterDraft.encounter_id == encounter.id))
     assert updated_draft is not None
     assert updated_draft.subjective is None
+
+    client._transport.app.dependency_overrides.pop(get_note_generation_service, None)
+
+
+@pytest.mark.asyncio
+async def test_generation_ai_provider_failure_preserves_existing_draft(client, db_session) -> None:
+    failing_client = FailingClinicalScribeClient()
+
+    def override_note_generation_service() -> NoteGenerationService:
+        return NoteGenerationService(
+            ai_client=failing_client,
+            patient_history_service=PatientHistoryService(),
+        )
+
+    client._transport.app.dependency_overrides[get_note_generation_service] = override_note_generation_service
+
+    provider = create_user("generation.failure.provider@example.com", UserRole.PROVIDER)
+    admin = create_user("generation.failure.admin@example.com", UserRole.ADMIN)
+    db_session.add_all([provider, admin])
+    await db_session.flush()
+
+    template = build_template(creator_id=admin.id)
+    patient = Patient(first_name="Riley", last_name="Retry", date_of_birth=date(1991, 5, 17))
+    db_session.add_all([template, patient])
+    await db_session.flush()
+
+    encounter = Encounter(
+        patient_id=patient.id,
+        provider_id=provider.id,
+        template_id=template.id,
+        status=EncounterStatus.DRAFT,
+        encounter_date=datetime.now(UTC),
+    )
+    db_session.add(encounter)
+    await db_session.flush()
+
+    draft = EncounterDraft(
+        encounter_id=encounter.id,
+        transcript="Patient reports chronic cough and denies chest pain.",
+        observations="Existing manual note should remain.",
+        subjective="Existing subjective content.",
+        objective="Existing objective content.",
+        assessment="Existing assessment content.",
+        plan="Existing plan content.",
+        draft_revision=4,
+    )
+    db_session.add(draft)
+    await db_session.commit()
+
+    await sign_in(client, provider.email)
+    response = await client.post(f"/api/encounters/{encounter.id}/generate")
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert any(
+        event == "generation_error" and data["code"] == "ai_provider_error"
+        for event, data in events
+    )
+
+    updated_draft = await db_session.scalar(
+        select(EncounterDraft).where(EncounterDraft.encounter_id == encounter.id)
+    )
+    assert updated_draft is not None
+    assert updated_draft.subjective == "Existing subjective content."
+    assert updated_draft.objective == "Existing objective content."
+    assert updated_draft.assessment == "Existing assessment content."
+    assert updated_draft.plan == "Existing plan content."
+    assert updated_draft.draft_revision == 4
 
     client._transport.app.dependency_overrides.pop(get_note_generation_service, None)

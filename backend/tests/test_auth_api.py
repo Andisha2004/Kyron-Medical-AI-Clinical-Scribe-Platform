@@ -144,6 +144,51 @@ async def test_logout_clears_authentication_cookie(client, db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_expired_or_cleared_session_blocks_protected_save_route(client, db_session) -> None:
+    admin = create_user("expired-save-admin@example.com", UserRole.ADMIN)
+    provider = create_user("expired-save-provider@example.com", UserRole.PROVIDER)
+    patient = Patient(first_name="Jordan", last_name="Expired", date_of_birth=datetime(1991, 6, 2).date())
+    template = Template(
+        name="Expired Save Template",
+        description="Used for expired session save testing.",
+        is_active=True,
+        created_by_user=admin,
+    )
+    encounter = Encounter(
+        patient=patient,
+        provider=provider,
+        template=template,
+        status=EncounterStatus.DRAFT,
+        encounter_date=datetime.now(UTC),
+    )
+    db_session.add_all([admin, provider, patient, template, encounter])
+    await db_session.commit()
+
+    login_response = await client.post(
+        "/api/auth/login",
+        json={"email": "expired-save-provider@example.com", "password": "DemoPass123!"},
+    )
+    assert login_response.status_code == 200
+
+    logout_response = await client.post("/api/auth/logout")
+    assert logout_response.status_code == 200
+
+    response = await client.post(
+        f"/api/encounters/{encounter.id}/save",
+        json={
+            "subjective": "Recovered subjective",
+            "objective": "",
+            "assessment": "",
+            "plan": "",
+            "icd10_codes": [],
+            "idempotency_key": "expired-session-save",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_unauthenticated_user_cannot_access_admin_route(client) -> None:
     response = await client.get("/api/admin/providers/status")
 
@@ -164,6 +209,26 @@ async def test_provider_cannot_access_admin_route(client, db_session) -> None:
 
     response = await client.get("/api/admin/providers/status")
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_deactivated_provider_is_blocked_on_next_protected_request(client, db_session) -> None:
+    provider = create_user("deactivated-after-login@example.com", UserRole.PROVIDER)
+    db_session.add(provider)
+    await db_session.commit()
+
+    login_response = await client.post(
+        "/api/auth/login",
+        json={"email": "deactivated-after-login@example.com", "password": "DemoPass123!"},
+    )
+    assert login_response.status_code == 200
+
+    provider.is_active = False
+    await db_session.commit()
+
+    response = await client.get("/api/auth/me")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Account is deactivated."
 
 
 @pytest.mark.asyncio
