@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ApiError } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { getEncounterDetail, saveEncounterNote, updateEncounterDraft } from "@/lib/encounters";
+import { searchIcdCodes } from "@/lib/icd";
 import { getNoteVersions } from "@/lib/notes";
 import { streamJsonEvents } from "@/lib/stream";
 import { getActiveTemplates } from "@/lib/templates";
@@ -18,6 +19,7 @@ import type {
   EncounterDraftResponse,
 } from "@/types/encounter";
 import type { GenerationEventDataMap } from "@/types/generation";
+import type { IcdSearchResult } from "@/types/icd";
 import type { NoteVersion } from "@/types/note";
 import type { TemplateSummary } from "@/types/template";
 
@@ -159,6 +161,10 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
   const [versions, setVersions] = useState<NoteVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(null);
   const [comparisonVersionId, setComparisonVersionId] = useState<string>("");
+  const [icdQuery, setIcdQuery] = useState("");
+  const [icdResults, setIcdResults] = useState<IcdSearchResult[]>([]);
+  const [isSearchingIcd, setIsSearchingIcd] = useState(false);
+  const [icdSearchError, setIcdSearchError] = useState<string | null>(null);
   const hasLoadedInitialData = useRef(false);
   const lastSaveIdempotencyKeyRef = useRef<string | null>(null);
 
@@ -286,6 +292,56 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
       window.clearTimeout(timeoutId);
     };
   }, [baseRevision, draft, encounterId, isDirty, saveState]);
+
+  useEffect(() => {
+    if (!publicEnv.enableIcdSearch) {
+      return;
+    }
+
+    const normalizedQuery = icdQuery.trim();
+    if (normalizedQuery.length < 2) {
+      setIcdResults([]);
+      setIsSearchingIcd(false);
+      setIcdSearchError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearchingIcd(true);
+      setIcdSearchError(null);
+
+      try {
+        const results = await searchIcdCodes(normalizedQuery, {
+          signal: controller.signal,
+          limit: 8,
+        });
+        setIcdResults(results);
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (error instanceof ApiError) {
+          setIcdSearchError(error.message);
+        } else if (error instanceof Error) {
+          setIcdSearchError(error.message);
+        } else {
+          setIcdSearchError("Unable to search ICD-10 codes.");
+        }
+        setIcdResults([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearchingIcd(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [icdQuery]);
 
   async function refreshEncounterDetails() {
     const refreshedEncounter = await getEncounterDetail(encounterId);
@@ -504,6 +560,27 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
     return version.saved_by_user.email;
   }
 
+  function addSelectedIcdCode(result: IcdSearchResult) {
+    if (draft.selected_icd10_codes.some((item) => item.code === result.code)) {
+      return;
+    }
+
+    updateField("selected_icd10_codes", [
+      ...draft.selected_icd10_codes,
+      {
+        code: result.code,
+        description: result.description,
+      },
+    ]);
+  }
+
+  function removeSelectedIcdCode(code: string) {
+    updateField(
+      "selected_icd10_codes",
+      draft.selected_icd10_codes.filter((item) => item.code !== code),
+    );
+  }
+
   const comparisonVersion =
     comparisonVersionId && selectedVersion
       ? (versions.find((version) => version.id === comparisonVersionId) ?? null)
@@ -683,8 +760,8 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="font-semibold text-slate-950">Dictation and voice controls</h2>
             <p className="mt-3 text-sm text-slate-600">
-              Live dictation, ICD-10 search, and voice editing will be connected in the next phases.
-              This workspace already persists transcript and SOAP edits safely.
+              Live dictation and voice editing will be connected in the next phases. This workspace
+              already persists transcript, ICD-10 selections, and SOAP edits safely.
             </p>
           </div>
         </section>
@@ -719,7 +796,114 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                 />
               </div>
             ))}
+
+            <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="font-semibold text-slate-950">Selected ICD-10 codes</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                These codes are saved with the assessment and included in note versions.
+              </p>
+
+              {draft.selected_icd10_codes.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-600">No ICD-10 codes selected yet.</p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {draft.selected_icd10_codes.map((codeEntry) => (
+                    <div
+                      key={codeEntry.code}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{codeEntry.code}</p>
+                        <p className="mt-1 text-sm text-slate-600">{codeEntry.description}</p>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        className="shrink-0"
+                        onClick={() => removeSelectedIcdCode(codeEntry.code)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          {publicEnv.enableIcdSearch ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="font-semibold text-slate-950">ICD-10 search</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Search by code, diagnosis name, or a plain-English phrase such as &quot;right knee
+                arthritis&quot;.
+              </p>
+
+              <div className="mt-4">
+                <label htmlFor="icd-search" className="block text-sm font-semibold text-slate-800">
+                  Search query
+                </label>
+                <input
+                  id="icd-search"
+                  type="text"
+                  value={icdQuery}
+                  onChange={(event) => setIcdQuery(event.target.value)}
+                  placeholder="Search ICD-10 codes"
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                />
+              </div>
+
+              {isSearchingIcd ? (
+                <p className="mt-4 text-sm text-slate-600">Searching ICD-10 dataset...</p>
+              ) : null}
+
+              {icdSearchError ? (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {icdSearchError}
+                </div>
+              ) : null}
+
+              {!isSearchingIcd &&
+              icdQuery.trim().length >= 2 &&
+              icdResults.length === 0 &&
+              !icdSearchError ? (
+                <p className="mt-4 text-sm text-slate-600">No matching ICD-10 codes found.</p>
+              ) : null}
+
+              {icdResults.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {icdResults.map((result) => {
+                    const isAlreadySelected = draft.selected_icd10_codes.some(
+                      (item) => item.code === result.code,
+                    );
+
+                    return (
+                      <div
+                        key={result.code}
+                        className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {result.code}
+                            {result.category ? ` • ${result.category}` : ""}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">{result.description}</p>
+                        </div>
+
+                        <Button
+                          variant={isAlreadySelected ? "secondary" : "primary"}
+                          className="shrink-0"
+                          onClick={() => addSelectedIcdCode(result)}
+                          disabled={isAlreadySelected}
+                        >
+                          {isAlreadySelected ? "Added" : "Add to assessment"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="font-semibold text-slate-950">Version history</h2>
@@ -776,6 +960,24 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                         </div>
                       </div>
                     ))}
+
+                    <div className="mt-4">
+                      <p className="text-sm font-semibold text-slate-800">ICD-10 codes</p>
+                      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {selectedVersion.icd10_codes && selectedVersion.icd10_codes.length > 0 ? (
+                          <div className="space-y-2">
+                            {selectedVersion.icd10_codes.map((codeEntry) => (
+                              <div key={codeEntry.code}>
+                                <span className="font-semibold">{codeEntry.code}</span>
+                                {codeEntry.description ? ` — ${codeEntry.description}` : ""}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          "No ICD-10 codes saved for this version."
+                        )}
+                      </div>
+                    </div>
 
                     {versions.length > 1 ? (
                       <div className="mt-6 border-t border-slate-200 pt-4">
