@@ -12,7 +12,7 @@ export default function NewEncounterPage() {
     <div>
       <PageHeader
         title="New encounter"
-        description="Create a clinical encounter before starting recording, transcription, and note generation."
+        description="Start the visit here, then move into transcript capture, SOAP drafting, coding, and final review."
       />
       <NewEncounterForm />
     </div>
