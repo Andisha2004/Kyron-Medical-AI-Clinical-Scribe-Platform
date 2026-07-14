@@ -224,6 +224,12 @@ export function VoiceEditPanel({
 
   return (
     <div className="space-y-4" data-testid="voice-edit-panel">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+        This is a note-editing command tool, not patient dictation. It works best with commands like
+        &quot;Add that the patient denies fever&quot;, &quot;Move the knee pain into
+        Subjective&quot;, or &quot;Shorten the Plan&quot;.
+      </div>
+
       <div className="flex flex-wrap gap-3">
         <Button
           variant="secondary"
@@ -329,10 +335,10 @@ export function VoiceEditPanel({
         className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
         data-testid="voice-conversation-panel"
       >
-        <p className="text-sm font-semibold text-slate-800">Conversation transcript</p>
+        <p className="text-sm font-semibold text-slate-800">Command history</p>
         {conversationTurns.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">
-            Start voice editing or submit a manual command to begin the conversation.
+            Start voice editing or submit a manual command to begin the command history.
           </p>
         ) : (
           <div className="mt-3 space-y-3">

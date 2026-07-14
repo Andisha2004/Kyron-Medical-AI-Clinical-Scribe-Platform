@@ -158,6 +158,29 @@ def test_dictation_patch_application_and_voice_patch_application() -> None:
     assert "Mild swelling noted." not in (draft.objective or "")
 
 
+def test_voice_service_interprets_natural_spoken_note_content_as_append() -> None:
+    draft = EncounterDraft(
+        encounter_id="encounter-id",
+        transcript="",
+        subjective="Patient reports cough.",
+        objective="",
+        assessment="",
+        plan="",
+        selected_icd10_codes=[],
+        draft_revision=1,
+    )
+
+    voice_service = VoiceEditService()
+    operation = voice_service.interpret_command(
+        "the patient is saying that they are having very high fever and cannot sleep",
+        draft,
+    )
+
+    assert operation.operation == "append"
+    assert operation.target_section == "subjective"
+    assert operation.new_text == "Patient reports they are having very high fever and cannot sleep."
+
+
 def test_icd_ranking_prefers_exact_code_matches() -> None:
     service = IcdService()
     exact_match = Icd10Code(

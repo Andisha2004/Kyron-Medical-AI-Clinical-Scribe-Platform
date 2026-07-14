@@ -155,6 +155,15 @@ class VoiceEditService:
         if shorten_match:
             return VoiceEditOperation(operation="shorten", target_section=shorten_match.group(1))
 
+        if self.looks_like_direct_note_content(lowered):
+            normalized_content = self.normalize_spoken_content(normalized_command)
+            target_section = self.infer_default_append_section(normalized_content)
+            return VoiceEditOperation(
+                operation="append",
+                target_section=target_section,
+                new_text=normalized_content,
+            )
+
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
@@ -188,6 +197,76 @@ class VoiceEditService:
             sentence += "."
 
         return sentence
+
+    def looks_like_direct_note_content(self, command: str) -> bool:
+        lowered = command.strip().lower()
+        if not lowered:
+            return False
+
+        if len(lowered.split()) < 4:
+            return False
+
+        imperative_prefixes = (
+            "add ",
+            "append ",
+            "include ",
+            "move ",
+            "remove ",
+            "replace ",
+            "shorten ",
+        )
+        if lowered.startswith(imperative_prefixes):
+            return False
+
+        content_markers = (
+            "patient ",
+            "the patient ",
+            "provider ",
+            "exam ",
+            "examination ",
+            "blood pressure ",
+            "bp ",
+            "heart rate ",
+            "temperature ",
+            "reports ",
+            "denies ",
+            "complains ",
+            "follow up ",
+        )
+        return lowered.startswith(content_markers) or any(
+            marker in lowered for marker in (" fever", " pain", " cough", " chills", " nausea")
+        )
+
+    def normalize_spoken_content(self, command: str) -> str:
+        cleaned = " ".join(command.strip().split())
+        lowered = cleaned.lower()
+
+        replacements = (
+            ("the patient is saying that ", "patient reports "),
+            ("the patient says that ", "patient reports "),
+            ("the patient said that ", "patient reports "),
+            ("patient is saying that ", "patient reports "),
+            ("patient says that ", "patient reports "),
+            ("patient said that ", "patient reports "),
+            ("the patient is talking that ", "patient reports "),
+            ("the patient talking that ", "patient reports "),
+            ("the patient reports that ", "patient reports "),
+            ("patient reports that ", "patient reports "),
+            ("provider says ", ""),
+            ("provider said ", ""),
+        )
+
+        for source, target in replacements:
+            if lowered.startswith(source):
+                cleaned = target + cleaned[len(source) :]
+                lowered = cleaned.lower()
+                break
+
+        cleaned = re.sub(r"\bthey're\b", "they are", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bcan't\b", "cannot", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bwon't\b", "will not", cleaned, flags=re.IGNORECASE)
+
+        return self.normalize_inserted_text(cleaned)
 
     def infer_default_append_section(self, content: str) -> SoapSection:
         lowered = content.lower()
@@ -432,16 +511,16 @@ class VoiceEditService:
         updated_section: SoapSection,
     ) -> str:
         if operation.operation == "append":
-            return f"Done. I added that to {updated_section.title()}."
+            return f"I added that to {updated_section.title()}."
         if operation.operation == "move":
-            return f"Done. I moved that content into {updated_section.title()}."
+            return f"I moved that content into {updated_section.title()}."
         if operation.operation == "remove":
-            return f"Done. I removed that from {updated_section.title()}."
+            return f"I removed that from {updated_section.title()}."
         if operation.operation == "replace":
-            return f"Done. I updated the wording in {updated_section.title()}."
+            return f"I updated the wording in {updated_section.title()}."
         if operation.operation == "shorten":
-            return f"Done. I shortened {updated_section.title()}."
-        return "Done."
+            return f"I shortened {updated_section.title()}."
+        return "I updated the note."
 
 
 def get_voice_edit_service() -> VoiceEditService:
