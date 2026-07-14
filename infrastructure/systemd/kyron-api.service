@@ -1,0 +1,17 @@
+[Unit]
+Description=Kyron Medical FastAPI API
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/kyron/backend
+EnvironmentFile=/opt/kyron/backend/.env
+ExecStart=/opt/kyron/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/kyron-api.log
+StandardError=append:/var/log/kyron-api.error.log
+
+[Install]
+WantedBy=multi-user.target

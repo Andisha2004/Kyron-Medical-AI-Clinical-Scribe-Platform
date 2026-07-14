@@ -1,0 +1,17 @@
+[Unit]
+Description=Kyron Medical Next.js Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/kyron/frontend
+EnvironmentFile=/opt/kyron/frontend/.env.local
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/kyron-frontend.log
+StandardError=append:/var/log/kyron-frontend.error.log
+
+[Install]
+WantedBy=multi-user.target

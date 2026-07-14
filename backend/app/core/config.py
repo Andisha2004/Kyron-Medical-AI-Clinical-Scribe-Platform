@@ -3,6 +3,8 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.aws_secrets import load_aws_runtime_settings
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -23,6 +25,10 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
 
     database_url: str = Field(..., alias="DATABASE_URL")
+    database_pool_size: int = 10
+    database_max_overflow: int = 20
+    database_pool_recycle_seconds: int = 1800
+    database_pool_pre_ping: bool = True
     redis_url: str = "redis://localhost:6379/0"
 
     jwt_secret_key: str = Field(..., alias="JWT_SECRET_KEY")
@@ -58,6 +64,9 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = "replace_with_aws_secret_access_key"
     aws_region: str = "us-east-1"
     aws_s3_bucket: str = "replace_with_bucket_name"
+    aws_use_runtime_secrets: bool = False
+    aws_secrets_manager_secret_id: str | None = None
+    aws_parameter_store_path: str | None = None
 
     icd_api_base_url: str = "replace_with_icd_api_base_url"
     icd_api_key: str = "replace_with_icd_api_key"
@@ -71,4 +80,15 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+
+    if settings.aws_use_runtime_secrets:
+        runtime_settings = load_aws_runtime_settings(
+            region=settings.aws_region,
+            secrets_manager_secret_id=settings.aws_secrets_manager_secret_id,
+            parameter_store_path=settings.aws_parameter_store_path,
+        )
+        if runtime_settings:
+            settings = settings.model_copy(update=runtime_settings)
+
+    return settings

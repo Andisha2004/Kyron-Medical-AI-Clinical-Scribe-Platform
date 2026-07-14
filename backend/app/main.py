@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_database_session
 from app.api import auth, encounters, icd, notes, patients, providers, templates, voice
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
@@ -24,16 +27,33 @@ async def lifespan(_: FastAPI):
 api_router = APIRouter(prefix="/api")
 
 
-async def _health_response() -> HealthResponse:
+async def _health_response(session: AsyncSession | None = None) -> HealthResponse:
+    database_status = None
+    if session is not None:
+        try:
+            await session.execute(text("SELECT 1"))
+            database_status = "ok"
+        except Exception:
+            database_status = "error"
+
     return HealthResponse(
         service=settings.app_name,
         environment=settings.app_env,
+        database_status=database_status,
+        database_pool={
+            "pool_size": settings.database_pool_size,
+            "max_overflow": settings.database_max_overflow,
+            "pool_recycle_seconds": settings.database_pool_recycle_seconds,
+            "pool_pre_ping": settings.database_pool_pre_ping,
+        },
     )
 
 
 @api_router.get("/health", response_model=HealthResponse, tags=["health"])
-async def health_check() -> HealthResponse:
-    return await _health_response()
+async def health_check(
+    session: AsyncSession = Depends(get_database_session),
+) -> HealthResponse:
+    return await _health_response(session)
 
 
 api_router.include_router(auth.router)
