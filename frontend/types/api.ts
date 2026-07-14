@@ -1,7 +1,9 @@
 export interface ApiErrorBody {
   detail?: string;
   message?: string;
-  errors?: Record<string, string[]>;
+  errors?: Record<string, unknown>;
+  path?: string;
+  timestamp?: string;
 }
 
 export interface ApiHealthResponse {

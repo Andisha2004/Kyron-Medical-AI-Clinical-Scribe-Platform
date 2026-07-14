@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { AuthGuard } from "@/components/auth/auth-guard";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
 
 const adminNavigation = [
@@ -15,8 +17,10 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
-    <DashboardSidebar title="Administration" items={adminNavigation}>
-      {children}
-    </DashboardSidebar>
+    <AuthGuard allowedRoles={["admin"]}>
+      <DashboardSidebar title="Administration" items={adminNavigation} footer={<LogoutButton />}>
+        {children}
+      </DashboardSidebar>
+    </AuthGuard>
   );
 }

@@ -1,8 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-router = APIRouter(prefix="/providers", tags=["providers"])
+from app.api.dependencies import require_admin
+
+router = APIRouter(prefix="/admin/providers", tags=["providers"])
 
 
 @router.get("/status")
-async def providers_status() -> dict[str, str]:
-    return {"status": "not_implemented"}
+async def providers_status(_: str = Depends(require_admin)) -> dict[str, str]:
+    return {"status": "admin_authenticated"}

@@ -28,6 +28,22 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def http_exception_handler(
         request: Request, exc: HTTPException
     ) -> JSONResponse:
+        if isinstance(exc.detail, dict):
+            message = str(exc.detail.get("message", "Request failed."))
+            details = exc.detail.get("errors")
+            if details is None:
+                details = {
+                    key: value
+                    for key, value in exc.detail.items()
+                    if key != "message"
+                } or None
+            return _error_response(
+                request,
+                status_code=exc.status_code,
+                message=message,
+                details=details,
+            )
+
         return _error_response(
             request,
             status_code=exc.status_code,

@@ -1,0 +1,4 @@
+Update an existing SOAP note using only the newly provided finalized clinical information.
+Apply the smallest possible changes.
+Preserve unrelated existing content.
+If the new information is not clinically meaningful, do not invent a patch.

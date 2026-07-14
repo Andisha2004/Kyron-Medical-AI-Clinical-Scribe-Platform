@@ -29,10 +29,15 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    auth_cookie_name: str = "kyron_access_token"
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
 
     llm_provider: str = "openai"
     openai_api_key: str = "replace_with_openai_api_key"
     openai_model: str = "gpt-4.1-mini"
+    openai_timeout_seconds: float = 30.0
+    openai_max_retries: int = 2
 
     anthropic_api_key: str = "replace_with_anthropic_api_key"
     anthropic_model: str = "claude-3-5-sonnet-latest"

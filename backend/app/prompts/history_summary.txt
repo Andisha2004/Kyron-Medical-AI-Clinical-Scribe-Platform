@@ -1,0 +1,3 @@
+Summarize only clinically relevant prior diagnoses, treatments, and follow-up context from earlier encounters.
+Do not restate unrelated details.
+Label historical details as prior context rather than current findings.

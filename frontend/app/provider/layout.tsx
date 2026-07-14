@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { AuthGuard } from "@/components/auth/auth-guard";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
 
 const providerNavigation = [
@@ -14,8 +16,10 @@ interface ProviderLayoutProps {
 
 export default function ProviderLayout({ children }: ProviderLayoutProps) {
   return (
-    <DashboardSidebar title="Provider" items={providerNavigation}>
-      {children}
-    </DashboardSidebar>
+    <AuthGuard allowedRoles={["provider"]}>
+      <DashboardSidebar title="Provider" items={providerNavigation} footer={<LogoutButton />}>
+        {children}
+      </DashboardSidebar>
+    </AuthGuard>
   );
 }

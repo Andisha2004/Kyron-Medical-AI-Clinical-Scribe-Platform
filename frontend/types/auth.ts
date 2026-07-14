@@ -3,9 +3,10 @@ export type UserRole = "provider" | "admin";
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  first_name: string | null;
+  last_name: string | null;
   role: UserRole;
+  is_active: boolean;
 }
 
 export interface LoginRequest {
@@ -14,7 +15,6 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  tokenType: "bearer";
   user: AuthenticatedUser;
+  message: string;
 }

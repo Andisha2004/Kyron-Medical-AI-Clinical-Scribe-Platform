@@ -1,0 +1,3 @@
+Interpret the provider's spoken edit request and return the smallest safe structured note edit.
+Preserve all unrelated note content unless the provider explicitly asks to remove, replace, shorten, or move it.
+Never rewrite the full note when a local edit is sufficient.
