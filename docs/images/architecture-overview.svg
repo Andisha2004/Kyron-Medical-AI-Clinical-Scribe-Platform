@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Kyron Medical architecture overview</title>
+  <desc id="desc">A high-level diagram showing the browser, Next.js frontend, FastAPI backend, PostgreSQL, local voice and AI services, and optional AWS deployment targets.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Arial, sans-serif; fill: #475569; }
+      .section { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 16px Arial, sans-serif; fill: #0f172a; }
+      .text { font: 400 14px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 13px Arial, sans-serif; fill: #475569; }
+      .box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 18; }
+      .accent { fill: #eff6ff; stroke: #93c5fd; stroke-width: 2; rx: 18; }
+      .storage { fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 18; }
+      .voice { fill: #f0fdf4; stroke: #86efac; stroke-width: 2; rx: 18; }
+      .aws { fill: #fff7ed; stroke: #fdba74; stroke-width: 2; rx: 18; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .dashed { stroke-dasharray: 8 8; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto">
+      <polygon points="0 0, 8 3.5, 0 7" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="760" fill="url(#bg)"/>
+
+  <text x="60" y="58" class="title">Kyron Medical Architecture Overview</text>
+  <text x="60" y="88" class="subtitle">Local-first clinical scribe prototype with an AWS-ready deployment path</text>
+
+  <text x="60" y="140" class="section">User-facing application</text>
+  <rect x="60" y="165" width="230" height="120" class="accent"/>
+  <text x="85" y="200" class="label">Browser</text>
+  <text x="85" y="228" class="text">Provider and admin UI</text>
+  <text x="85" y="252" class="text">Login, encounters, templates</text>
+
+  <rect x="360" y="150" width="300" height="150" class="box"/>
+  <text x="385" y="186" class="label">Next.js Frontend</text>
+  <text x="385" y="214" class="text">App Router, TypeScript, Tailwind</text>
+  <text x="385" y="238" class="text">Provider workflow, admin UI, version diff</text>
+  <text x="385" y="262" class="text">Playwright browser E2E coverage</text>
+
+  <path d="M290 225 L360 225" class="arrow"/>
+
+  <text x="60" y="360" class="section">Application services</text>
+  <rect x="360" y="335" width="300" height="180" class="box"/>
+  <text x="385" y="371" class="label">FastAPI Backend</text>
+  <text x="385" y="399" class="text">Auth, encounters, notes, ICD, admin APIs</text>
+  <text x="385" y="423" class="text">Structured logging and error handling</text>
+  <text x="385" y="447" class="text">JWT cookies, role checks, ownership checks</text>
+  <text x="385" y="471" class="text">Alembic migrations and pytest coverage</text>
+
+  <path d="M510 300 L510 335" class="arrow"/>
+
+  <rect x="760" y="335" width="320" height="180" class="storage"/>
+  <text x="785" y="371" class="label">PostgreSQL</text>
+  <text x="785" y="399" class="text">Users, patients, encounters, drafts</text>
+  <text x="785" y="423" class="text">Notes, note versions, templates, ICD-10</text>
+  <text x="785" y="447" class="text">Audit logs and revision-aware persistence</text>
+  <text x="785" y="471" class="text">Docker locally, private RDS in production</text>
+
+  <path d="M660 425 L760 425" class="arrow"/>
+
+  <text x="60" y="585" class="section">AI and voice layer</text>
+  <rect x="60" y="610" width="300" height="110" class="voice"/>
+  <text x="85" y="646" class="label">Voice and Dictation UI</text>
+  <text x="85" y="674" class="text">Microphone capture, dictation controls</text>
+  <text x="85" y="698" class="text">Voice editing and transcript updates</text>
+
+  <rect x="430" y="590" width="300" height="130" class="voice"/>
+  <text x="455" y="626" class="label">AI and Realtime Services</text>
+  <text x="455" y="654" class="text">SOAP generation wrapper</text>
+  <text x="455" y="678" class="text">Realtime voice session orchestration</text>
+  <text x="455" y="702" class="text">Mock, local, or paid provider integrations</text>
+
+  <path d="M360 665 L430 655" class="arrow"/>
+  <path d="M580 590 L580 515" class="arrow"/>
+
+  <rect x="810" y="585" width="300" height="135" class="aws"/>
+  <text x="835" y="621" class="label">Optional AWS Deployment Path</text>
+  <text x="835" y="649" class="text">EC2 public entry point with nginx</text>
+  <text x="835" y="673" class="text">Secrets Manager or Parameter Store</text>
+  <text x="835" y="697" class="text">Private RDS PostgreSQL and systemd services</text>
+
+  <path d="M930 585 L930 515" class="arrow dashed"/>
+  <path d="M660 225 L930 225 L930 585" class="arrow dashed"/>
+
+  <text x="950" y="560" class="small">Dashed lines show the production deployment target.</text>
+</svg>
