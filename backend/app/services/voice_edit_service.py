@@ -1,29 +1,46 @@
 import re
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.openai_client import AiClientError, get_openai_clinical_scribe_client
+from app.core.config import get_settings
 from app.db.models.encounter import Encounter
 from app.db.models.encounter_draft import EncounterDraft
-from app.schemas.voice import SoapSection, VoiceCommandRequest, VoiceEditOperation
+from app.schemas.voice import SoapSection, VoiceCommandRequest, VoiceEditOperation, VoiceRewriteResult
 from app.services.audit_service import AuditService
 
 SECTION_FIELDS: tuple[SoapSection, ...] = ("subjective", "objective", "assessment", "plan")
+PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 
 @dataclass
 class VoiceEditResult:
     operation: VoiceEditOperation
-    updated_section: SoapSection
-    updated_text: str
+    updated_section: SoapSection | None
+    updated_text: str | None
     changed: bool
     assistant_response: str
     draft: EncounterDraft
 
 
+class VoiceRewriteClient(Protocol):
+    async def rewrite_soap_note_for_voice_command(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> VoiceRewriteResult: ...
+
+
 class VoiceEditService:
+    def __init__(self, *, ai_client: VoiceRewriteClient | None = None) -> None:
+        self.ai_client = ai_client
+
     def ensure_draft(self, encounter: Encounter, draft: EncounterDraft | None) -> EncounterDraft:
         if draft is not None:
             return draft
@@ -63,8 +80,19 @@ class VoiceEditService:
                 detail="Draft revision conflict.",
             )
 
-        operation = self.interpret_command(payload.command, draft)
-        updated_section, updated_text, changed = self.apply_operation(draft, operation)
+        if self.should_use_ai_rewrite(payload.command):
+            updated_section = None
+            updated_text = None
+            operation = VoiceEditOperation(operation="rewrite_note")
+            changed, assistant_response = await self.apply_ai_rewrite(
+                encounter=encounter,
+                draft=draft,
+                command=payload.command,
+            )
+        else:
+            operation = self.interpret_command(payload.command, draft)
+            updated_section, updated_text, changed = self.apply_operation(draft, operation)
+            assistant_response = self.build_assistant_response(operation, updated_section, changed)
 
         encounter.updated_at = draft.updated_at
         await AuditService.log_event(
@@ -87,7 +115,7 @@ class VoiceEditService:
             updated_section=updated_section,
             updated_text=updated_text,
             changed=changed,
-            assistant_response=self.build_assistant_response(operation, updated_section, changed),
+            assistant_response=assistant_response,
             draft=draft,
         )
 
@@ -99,9 +127,9 @@ class VoiceEditService:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
-                    "This request needs a rewrite-style model and is too broad for the local "
-                    "rule-based editor. Use a specific command like 'Add that the patient denies "
-                    "fever', 'Move the knee pain into Subjective', or 'Shorten the Plan.'"
+                    "This request needs a rewrite-style model. Switch LLM_PROVIDER to ollama for "
+                    "local note rewrites, or use a specific command like 'Add that the patient "
+                    "denies fever', 'Move the knee pain into Subjective', or 'Shorten the Plan.'"
                 ),
             )
 
@@ -269,6 +297,9 @@ class VoiceEditService:
             "summarize everything",
         )
         return any(phrase in lowered for phrase in meta_phrases)
+
+    def should_use_ai_rewrite(self, command: str) -> bool:
+        return self.ai_client is not None and self.is_meta_revision_request(command)
 
     def normalize_spoken_content(self, command: str) -> str:
         cleaned = " ".join(command.strip().split())
@@ -538,31 +569,101 @@ class VoiceEditService:
         compact_lines = [line for line in lines if line]
         return "\n".join(compact_lines).strip()
 
+    async def apply_ai_rewrite(
+        self,
+        *,
+        encounter: Encounter,
+        draft: EncounterDraft,
+        command: str,
+    ) -> tuple[bool, str]:
+        if self.ai_client is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Local rewrite support is not configured.",
+            )
+
+        system_prompt = (PROMPTS_DIR / "voice_rewrite.txt").read_text()
+        user_prompt = self.build_voice_rewrite_prompt(encounter=encounter, draft=draft, command=command)
+
+        try:
+            rewrite = await self.ai_client.rewrite_soap_note_for_voice_command(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+        except AiClientError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+
+        changed = False
+        for section in SECTION_FIELDS:
+            new_value = self.clean_multiline_text(getattr(rewrite, section))
+            current_value = self.get_section_text(draft, section)
+            if new_value != current_value:
+                self.set_section_text(draft, section, new_value)
+                changed = True
+
+        return changed, rewrite.assistant_response
+
+    def build_voice_rewrite_prompt(
+        self,
+        *,
+        encounter: Encounter,
+        draft: EncounterDraft,
+        command: str,
+    ) -> str:
+        transcript = (draft.transcript or "").strip() or "Not provided."
+        observations = (draft.observations or "").strip() or "Not provided."
+        subjective = (draft.subjective or "").strip() or "Not provided."
+        objective = (draft.objective or "").strip() or "Not provided."
+        assessment = (draft.assessment or "").strip() or "Not provided."
+        plan = (draft.plan or "").strip() or "Not provided."
+        return (
+            f"Encounter ID: {encounter.id}\n"
+            f"Provider voice edit request:\n{command.strip()}\n\n"
+            f"Transcript:\n{transcript}\n\n"
+            f"Clinical observations:\n{observations}\n\n"
+            f"Current SOAP note:\n"
+            f"Subjective:\n{subjective}\n\n"
+            f"Objective:\n{objective}\n\n"
+            f"Assessment:\n{assessment}\n\n"
+            f"Plan:\n{plan}\n\n"
+            "Return JSON with keys subjective, objective, assessment, plan, assistant_response."
+        )
+
     def build_assistant_response(
         self,
         operation: VoiceEditOperation,
-        updated_section: SoapSection,
+        updated_section: SoapSection | None,
         changed: bool,
     ) -> str:
+        section_label = updated_section.title() if updated_section else "the note"
         if not changed:
             if operation.operation == "append":
-                return f"That content was already in {updated_section.title()}, so I left it unchanged."
+                return f"That content was already in {section_label}, so I left it unchanged."
             if operation.operation == "shorten":
-                return f"{updated_section.title()} was already concise, so I left it unchanged."
-            return f"I reviewed {updated_section.title()}, but nothing changed."
+                return f"{section_label} was already concise, so I left it unchanged."
+            if operation.operation == "rewrite_note":
+                return "I reviewed the SOAP note, but the local model did not make any safe changes."
+            return f"I reviewed {section_label}, but nothing changed."
 
         if operation.operation == "append":
-            return f"I added that to {updated_section.title()}."
+            return f"I added that to {section_label}."
         if operation.operation == "move":
-            return f"I moved that content into {updated_section.title()}."
+            return f"I moved that content into {section_label}."
         if operation.operation == "remove":
-            return f"I removed that from {updated_section.title()}."
+            return f"I removed that from {section_label}."
         if operation.operation == "replace":
-            return f"I updated the wording in {updated_section.title()}."
+            return f"I updated the wording in {section_label}."
         if operation.operation == "shorten":
-            return f"I shortened {updated_section.title()}."
+            return f"I shortened {section_label}."
+        if operation.operation == "rewrite_note":
+            return "I revised the SOAP note using the current transcript and observations."
         return "I updated the note."
 
 
 def get_voice_edit_service() -> VoiceEditService:
-    return VoiceEditService()
+    settings = get_settings()
+    ai_client = get_openai_clinical_scribe_client() if settings.llm_provider in {"ollama", "mock"} else None
+    return VoiceEditService(ai_client=ai_client)

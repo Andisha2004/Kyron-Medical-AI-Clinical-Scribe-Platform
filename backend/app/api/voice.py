@@ -116,6 +116,23 @@ async def create_voice_session(
         "replace_with_"
     )
 
+    if settings.llm_provider == "ollama":
+        return VoiceSessionResponse(
+            provider="ollama_local",
+            connection_method="browser_speech_fallback",
+            session_status="configured_locally_only",
+            model=settings.ollama_model,
+            voice="browser-speech",
+            supports_browser_audio=True,
+            supports_interruption=True,
+            supports_tool_calls=True,
+            supports_continuous_conversation=False,
+            message=(
+                "Local voice editing is configured to use browser speech recognition plus Ollama "
+                "for broader SOAP note rewrites."
+            ),
+        )
+
     if settings.voice_provider != "openai_realtime":
         return VoiceSessionResponse(
             provider=settings.voice_provider,

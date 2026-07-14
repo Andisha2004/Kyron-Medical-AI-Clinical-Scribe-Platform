@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.schemas.encounter import EncounterDraftResponse
 
 SoapSection = Literal["subjective", "objective", "assessment", "plan"]
-VoiceOperationType = Literal["append", "replace", "remove", "move", "shorten"]
+VoiceOperationType = Literal["append", "replace", "remove", "move", "shorten", "rewrite_note"]
 
 
 class VoiceConversationTurn(BaseModel):
@@ -43,6 +43,8 @@ class VoiceEditOperation(BaseModel):
         elif self.operation == "shorten":
             if not self.target_section:
                 raise ValueError("Shorten operations require target_section.")
+        elif self.operation == "rewrite_note":
+            return self
 
         for field_name in ("target_text", "new_text"):
             value = getattr(self, field_name)
@@ -66,6 +68,14 @@ class VoiceCommandResponse(BaseModel):
     updated_text: str | None = None
     draft_revision: int
     draft: EncounterDraftResponse
+
+
+class VoiceRewriteResult(BaseModel):
+    subjective: str
+    objective: str
+    assessment: str
+    plan: str
+    assistant_response: str
 
 
 class VoiceSessionResponse(BaseModel):

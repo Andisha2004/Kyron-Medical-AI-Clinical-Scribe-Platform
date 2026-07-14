@@ -1,7 +1,8 @@
 import type { EncounterDraftResponse } from "@/types/encounter";
 
 export type SoapSection = "subjective" | "objective" | "assessment" | "plan";
-export type VoiceOperationType = "append" | "replace" | "remove" | "move" | "shorten";
+export type VoiceOperationType =
+  "append" | "replace" | "remove" | "move" | "shorten" | "rewrite_note";
 
 export interface VoiceEditOperation {
   operation: VoiceOperationType;

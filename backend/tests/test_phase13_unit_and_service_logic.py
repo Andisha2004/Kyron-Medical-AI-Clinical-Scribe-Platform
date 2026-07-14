@@ -17,7 +17,7 @@ from app.db.models.template_section import TemplateSection
 from app.db.models.user import User
 from app.schemas.generation import SoapNoteGenerationResult
 from app.schemas.template import TemplateSectionInput
-from app.schemas.voice import DictationPatchOperation, VoiceEditOperation
+from app.schemas.voice import DictationPatchOperation, VoiceEditOperation, VoiceRewriteResult
 from app.services.audit_service import AuditService
 from app.services.dictation_service import DictationService
 from app.services.icd_service import IcdService
@@ -224,6 +224,48 @@ def test_voice_service_shorten_reports_when_text_is_already_concise() -> None:
     assert updated_text == "Recommend supportive care."
     assert changed is False
     assert response == "Plan was already concise, so I left it unchanged."
+
+
+@pytest.mark.asyncio
+async def test_voice_service_uses_ai_rewrite_for_broad_requests() -> None:
+    class FakeRewriteClient:
+        async def rewrite_soap_note_for_voice_command(
+            self,
+            *,
+            system_prompt: str,
+            user_prompt: str,
+        ):
+            return VoiceRewriteResult(
+                subjective="Patient reports cough and denies fever.",
+                objective="Lungs clear to auscultation.",
+                assessment="Upper respiratory infection.",
+                plan="Recommend hydration and return precautions.",
+                assistant_response="I revised the SOAP note using the current encounter details.",
+            )
+
+    encounter = Encounter(id="encounter-id", provider_id="provider-id")
+    draft = EncounterDraft(
+        encounter_id="encounter-id",
+        transcript="Patient reports cough.",
+        observations="Lungs clear to auscultation.",
+        subjective="Patient reports cough.",
+        objective="",
+        assessment="",
+        plan="",
+        selected_icd10_codes=[],
+        draft_revision=1,
+    )
+
+    voice_service = VoiceEditService(ai_client=FakeRewriteClient())
+    changed, assistant_response = await voice_service.apply_ai_rewrite(
+        encounter=encounter,
+        draft=draft,
+        command="Make the SOAP note better",
+    )
+
+    assert changed is True
+    assert assistant_response == "I revised the SOAP note using the current encounter details."
+    assert draft.objective == "Lungs clear to auscultation."
 
 
 def test_icd_ranking_prefers_exact_code_matches() -> None:

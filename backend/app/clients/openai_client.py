@@ -6,6 +6,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.schemas.generation import AssessmentItem, SoapNoteGenerationResult
+from app.schemas.voice import VoiceRewriteResult
 
 
 class AiClientError(Exception):
@@ -74,6 +75,42 @@ class MockClinicalScribeClient:
             plan=plan,
             missing_information=missing_information,
             warnings=warnings,
+        )
+
+    async def rewrite_soap_note_for_voice_command(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> VoiceRewriteResult:
+        prompt = user_prompt.lower()
+        command_match = re.search(r"provider voice edit request:\n(.+?)\n\n", prompt, re.DOTALL)
+        command = command_match.group(1).strip() if command_match else ""
+        subjective_match = re.search(r"subjective:\n(.*?)\n\nobjective:", user_prompt, re.DOTALL | re.IGNORECASE)
+        objective_match = re.search(r"objective:\n(.*?)\n\nassessment:", user_prompt, re.DOTALL | re.IGNORECASE)
+        assessment_match = re.search(r"assessment:\n(.*?)\n\nplan:", user_prompt, re.DOTALL | re.IGNORECASE)
+        plan_match = re.search(r"plan:\n(.*)$", user_prompt, re.DOTALL | re.IGNORECASE)
+
+        subjective = subjective_match.group(1).strip() if subjective_match else ""
+        objective = objective_match.group(1).strip() if objective_match else ""
+        assessment = assessment_match.group(1).strip() if assessment_match else ""
+        plan = plan_match.group(1).strip() if plan_match else ""
+
+        if "make it better" in command or "improve" in command:
+            if subjective and "denies fever" not in subjective.lower() and "fever" in prompt:
+                subjective = subjective.rstrip(".") + " and denies fever."
+            if plan:
+                plan = "Recommend supportive care, hydration, and return precautions if symptoms worsen."
+            assistant_response = "I revised the SOAP note using the current encounter details."
+        else:
+            assistant_response = "I reviewed the SOAP note and kept the current wording."
+
+        return VoiceRewriteResult(
+            subjective=subjective,
+            objective=objective,
+            assessment=assessment,
+            plan=plan,
+            assistant_response=assistant_response,
         )
 
 
@@ -177,10 +214,83 @@ class OpenAIClinicalScribeClient:
         raise AiClientError("The AI note generation service is unavailable right now. Please retry.")
 
 
+@dataclass
+class OllamaClinicalScribeClient:
+    timeout_seconds: float
+
+    def __post_init__(self) -> None:
+        self.settings = get_settings()
+
+    async def generate_soap_note(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> SoapNoteGenerationResult:
+        parsed = await self._generate_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            schema_name="soap_note_generation",
+        )
+        return SoapNoteGenerationResult.model_validate(parsed)
+
+    async def rewrite_soap_note_for_voice_command(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> VoiceRewriteResult:
+        parsed = await self._generate_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            schema_name="voice_rewrite",
+        )
+        return VoiceRewriteResult.model_validate(parsed)
+
+    async def _generate_json(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        schema_name: str,
+    ) -> dict:
+        request_payload = {
+            "model": self.settings.ollama_model,
+            "stream": False,
+            "format": "json",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.settings.ollama_base_url.rstrip('/')}/api/chat",
+                    json=request_payload,
+                )
+            response.raise_for_status()
+            body = response.json()
+            content = body["message"]["content"]
+            parsed = json.loads(content)
+            if not isinstance(parsed, dict):
+                raise ValueError(f"{schema_name} response was not a JSON object.")
+            return parsed
+        except httpx.TimeoutException as exc:
+            raise AiClientError("The local Ollama service timed out. Please retry.") from exc
+        except (httpx.HTTPError, KeyError, json.JSONDecodeError, ValueError) as exc:
+            raise AiClientError(
+                "The local Ollama service is unavailable or returned an invalid response."
+            ) from exc
+
+
 def get_openai_clinical_scribe_client() -> OpenAIClinicalScribeClient | MockClinicalScribeClient:
     settings = get_settings()
     if settings.llm_provider == "mock":
         return MockClinicalScribeClient()
+    if settings.llm_provider == "ollama":
+        return OllamaClinicalScribeClient(timeout_seconds=settings.ollama_timeout_seconds)
     return OpenAIClinicalScribeClient(
         timeout_seconds=settings.openai_timeout_seconds,
         max_retries=settings.openai_max_retries,

@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: float = 30.0
     openai_max_retries: int = 2
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "llama3.1:8b"
+    ollama_timeout_seconds: float = 60.0
     voice_provider: str = "openai_realtime"
     openai_realtime_model: str = "gpt-realtime"
     openai_realtime_voice: str = "alloy"
