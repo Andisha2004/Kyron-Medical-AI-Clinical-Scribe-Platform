@@ -6,16 +6,6 @@ backend, PostgreSQL persistence, authentication and role-based authorization,
 SOAP note generation, ICD-10 search, note versioning, admin workflows, and
 browser-based voice and dictation flows.
 
-## Live Application
-
-- Live application link: not configured in this repository snapshot
-- Deployment blueprint: [docs/09-deployment-and-infrastructure.md](docs/09-deployment-and-infrastructure.md)
-- AWS design: [infrastructure/architecture.md](infrastructure/architecture.md)
-
-If you want to keep the system cost-free, use the local workflow in this
-README and treat the AWS docs as a production-ready deployment plan instead of
-something you must launch right away.
-
 ## Demo Credentials
 
 These credentials are created by `backend/scripts/seed_demo.py` for local and
