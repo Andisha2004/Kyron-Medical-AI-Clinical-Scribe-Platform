@@ -663,12 +663,6 @@ Specific providers and models are documented separately in the AI architecture d
 └────────────────────────────┘
 ```
 
-A visual version of this architecture may also be stored under:
-
-```text
-docs/images/system-architecture.png
-```
-
 ---
 
 ## 13. Engineering Principles
@@ -755,5 +749,3 @@ docs/
 ├── 10-testing-strategy.md
 └── 11-implementation-plan.md
 ```
-
-These documents describe the system in increasing technical detail.
