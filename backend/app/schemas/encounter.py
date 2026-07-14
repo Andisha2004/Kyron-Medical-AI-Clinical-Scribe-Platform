@@ -78,6 +78,7 @@ class SaveEncounterNoteRequest(BaseModel):
     assessment: str | None = None
     plan: str | None = None
     icd10_codes: list[dict[str, str]] | None = None
+    idempotency_key: str
     generation_metadata: dict | None = None
 
 

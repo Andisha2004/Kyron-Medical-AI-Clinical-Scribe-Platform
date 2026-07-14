@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import (
     get_accessible_note,
@@ -10,7 +11,7 @@ from app.api.dependencies import (
 from app.db.models.note import Note
 from app.db.models.note_version import NoteVersion
 from app.db.models.user import User
-from app.schemas.note import NoteVersionResponse
+from app.schemas.note import NoteVersionResponse, SavedByUserSummary
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -29,7 +30,8 @@ async def get_note_versions(
         await session.scalars(
             select(NoteVersion)
             .where(NoteVersion.note_id == note.id)
-            .order_by(NoteVersion.version_number)
+            .options(selectinload(NoteVersion.saved_by_user).selectinload(User.provider_profile))
+            .order_by(NoteVersion.version_number.desc())
         )
     ).all()
     return [
@@ -38,6 +40,12 @@ async def get_note_versions(
             note_id=version.note_id,
             version_number=version.version_number,
             saved_by_user_id=version.saved_by_user_id,
+            saved_by_user=SavedByUserSummary(
+                id=version.saved_by_user.id,
+                email=version.saved_by_user.email,
+                first_name=version.saved_by_user.provider_profile.first_name if version.saved_by_user.provider_profile else None,
+                last_name=version.saved_by_user.provider_profile.last_name if version.saved_by_user.provider_profile else None,
+            ),
             subjective=version.subjective,
             objective=version.objective,
             assessment=version.assessment,

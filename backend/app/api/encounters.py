@@ -415,35 +415,82 @@ async def save_note(
     current_user=Depends(require_provider),
     session: AsyncSession = Depends(get_database_session),
 ) -> SaveEncounterNoteResponse:
-    note = await session.scalar(select(Note).where(Note.encounter_id == encounter.id))
-    if note is None:
-        note = Note(encounter_id=encounter.id)
-        session.add(note)
+    if not any(
+        (value or "").strip()
+        for value in [payload.subjective, payload.objective, payload.assessment, payload.plan]
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one SOAP section must contain content before saving.",
+        )
+
+    try:
+        note = await session.scalar(select(Note).where(Note.encounter_id == encounter.id))
+        if note is None:
+            note = Note(encounter_id=encounter.id)
+            session.add(note)
+            await session.flush()
+
+        existing_versions = (
+            await session.scalars(
+                select(NoteVersion)
+                .where(NoteVersion.note_id == note.id)
+                .order_by(NoteVersion.version_number.desc())
+            )
+        ).all()
+
+        for existing_version in existing_versions:
+            metadata = existing_version.generation_metadata or {}
+            if metadata.get("idempotency_key") == payload.idempotency_key:
+                return SaveEncounterNoteResponse(
+                    note_id=note.id,
+                    version_id=existing_version.id,
+                    version_number=existing_version.version_number,
+                    encounter_status=encounter.status,
+                )
+
+        latest_version_number = existing_versions[0].version_number if existing_versions else 0
+        next_version_number = latest_version_number + 1
+
+        generation_metadata = dict(payload.generation_metadata or {})
+        generation_metadata["idempotency_key"] = payload.idempotency_key
+
+        version = NoteVersion(
+            note_id=note.id,
+            version_number=next_version_number,
+            saved_by_user_id=current_user.id,
+            subjective=payload.subjective,
+            objective=payload.objective,
+            assessment=payload.assessment,
+            plan=payload.plan,
+            icd10_codes=payload.icd10_codes,
+            generation_metadata=generation_metadata,
+        )
+        session.add(version)
         await session.flush()
 
-    latest_version_number = await session.scalar(
-        select(func.max(NoteVersion.version_number)).where(NoteVersion.note_id == note.id)
-    )
-    next_version_number = (latest_version_number or 0) + 1
+        note.current_version_id = version.id
+        encounter.status = EncounterStatus.COMPLETED
+        encounter.updated_at = datetime.now(UTC)
+        await AuditService.log_event(
+            session,
+            actor_user_id=current_user.id,
+            action="NOTE_VERSION_SAVED",
+            entity_type="note",
+            entity_id=note.id,
+            metadata_json={
+                "encounter_id": encounter.id,
+                "version_id": version.id,
+                "version_number": version.version_number,
+                "idempotency_key": payload.idempotency_key,
+            },
+        )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
-    version = NoteVersion(
-        note_id=note.id,
-        version_number=next_version_number,
-        saved_by_user_id=current_user.id,
-        subjective=payload.subjective,
-        objective=payload.objective,
-        assessment=payload.assessment,
-        plan=payload.plan,
-        icd10_codes=payload.icd10_codes,
-        generation_metadata=payload.generation_metadata,
-    )
-    session.add(version)
-    await session.flush()
-
-    note.current_version_id = version.id
-    encounter.status = EncounterStatus.COMPLETED
-    await session.commit()
-    await session.refresh(version)
+    await session.refresh(encounter)
     return SaveEncounterNoteResponse(
         note_id=note.id,
         version_id=version.id,

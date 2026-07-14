@@ -92,6 +92,7 @@ export interface SaveEncounterNoteRequest {
   assessment: string;
   plan: string;
   icd10_codes: Array<Record<string, string>>;
+  idempotency_key: string;
   generation_metadata?: Record<string, unknown> | null;
 }
 

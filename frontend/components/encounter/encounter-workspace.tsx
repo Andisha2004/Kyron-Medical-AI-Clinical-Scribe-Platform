@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ApiError } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { getEncounterDetail, saveEncounterNote, updateEncounterDraft } from "@/lib/encounters";
+import { getNoteVersions } from "@/lib/notes";
 import { streamJsonEvents } from "@/lib/stream";
 import { getActiveTemplates } from "@/lib/templates";
 import type {
@@ -17,6 +18,7 @@ import type {
   EncounterDraftResponse,
 } from "@/types/encounter";
 import type { GenerationEventDataMap } from "@/types/generation";
+import type { NoteVersion } from "@/types/note";
 import type { TemplateSummary } from "@/types/template";
 
 type SaveState = "loading" | "idle" | "saving" | "saved" | "error" | "conflict";
@@ -51,6 +53,56 @@ function draftFromResponse(draft: EncounterDraftResponse | null | undefined): Dr
     assessment: draft.assessment ?? "",
     plan: draft.plan ?? "",
     selected_icd10_codes: draft.selected_icd10_codes ?? [],
+  };
+}
+
+function splitLines(value: string | null | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value.split("\n");
+}
+
+function getChangedSegments(
+  previousValue: string | null | undefined,
+  currentValue: string | null | undefined,
+): {
+  removed: string;
+  added: string;
+  changed: boolean;
+} {
+  const previousLines = splitLines(previousValue);
+  const currentLines = splitLines(currentValue);
+
+  let prefixLength = 0;
+  while (
+    prefixLength < previousLines.length &&
+    prefixLength < currentLines.length &&
+    previousLines[prefixLength] === currentLines[prefixLength]
+  ) {
+    prefixLength += 1;
+  }
+
+  let previousSuffixLength = previousLines.length - 1;
+  let currentSuffixLength = currentLines.length - 1;
+
+  while (
+    previousSuffixLength >= prefixLength &&
+    currentSuffixLength >= prefixLength &&
+    previousLines[previousSuffixLength] === currentLines[currentSuffixLength]
+  ) {
+    previousSuffixLength -= 1;
+    currentSuffixLength -= 1;
+  }
+
+  const removed = previousLines.slice(prefixLength, previousSuffixLength + 1).join("\n");
+  const added = currentLines.slice(prefixLength, currentSuffixLength + 1).join("\n");
+
+  return {
+    removed,
+    added,
+    changed: removed !== added,
   };
 }
 
@@ -104,7 +156,11 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
   const [generationStatusMessage, setGenerationStatusMessage] = useState<string | null>(null);
   const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
   const [missingInformation, setMissingInformation] = useState<string[]>([]);
+  const [versions, setVersions] = useState<NoteVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(null);
+  const [comparisonVersionId, setComparisonVersionId] = useState<string>("");
   const hasLoadedInitialData = useRef(false);
+  const lastSaveIdempotencyKeyRef = useRef<string | null>(null);
 
   const flashMessage = useMemo(() => {
     if (searchParams.get("created") !== "1") {
@@ -140,6 +196,18 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         setTemplates(templateResponse);
         setDraft(draftFromResponse(encounterResponse.draft));
         setBaseRevision(encounterResponse.draft?.draft_revision ?? null);
+        if (encounterResponse.note_id) {
+          const versionResponse = await getNoteVersions(encounterResponse.note_id);
+          if (isMounted) {
+            setVersions(versionResponse);
+            setSelectedVersion(versionResponse[0] ?? null);
+            setComparisonVersionId(versionResponse[1]?.id ?? "");
+          }
+        } else {
+          setVersions([]);
+          setSelectedVersion(null);
+          setComparisonVersionId("");
+        }
         setIsDirty(false);
         setSaveState("idle");
         setErrorMessage(null);
@@ -224,16 +292,64 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
     setEncounter(refreshedEncounter);
     setDraft(draftFromResponse(refreshedEncounter.draft));
     setBaseRevision(refreshedEncounter.draft?.draft_revision ?? null);
+    if (refreshedEncounter.note_id) {
+      const versionResponse = await getNoteVersions(refreshedEncounter.note_id);
+      setVersions(versionResponse);
+      let nextSelectedVersion: NoteVersion | null = null;
+      setSelectedVersion((current) => {
+        nextSelectedVersion = current
+          ? (versionResponse.find((version) => version.id === current.id) ??
+            versionResponse[0] ??
+            null)
+          : (versionResponse[0] ?? null);
+        return nextSelectedVersion;
+      });
+      setComparisonVersionId((current) => {
+        if (!nextSelectedVersion) {
+          return "";
+        }
+
+        if (current && versionResponse.some((version) => version.id === current)) {
+          return current;
+        }
+
+        return versionResponse.find((version) => version.id !== nextSelectedVersion?.id)?.id ?? "";
+      });
+    } else {
+      setVersions([]);
+      setSelectedVersion(null);
+      setComparisonVersionId("");
+    }
     setIsDirty(false);
     setSaveState("idle");
     setConflictDraft(null);
   }
+
+  useEffect(() => {
+    if (!selectedVersion) {
+      setComparisonVersionId("");
+      return;
+    }
+
+    setComparisonVersionId((current) => {
+      if (
+        current &&
+        current !== selectedVersion.id &&
+        versions.some((version) => version.id === current)
+      ) {
+        return current;
+      }
+
+      return versions.find((version) => version.id !== selectedVersion.id)?.id ?? "";
+    });
+  }, [selectedVersion, versions]);
 
   function updateField(field: keyof DraftState, value: string | Array<Record<string, string>>) {
     setDraft((current) => ({
       ...current,
       [field]: value,
     }));
+    lastSaveIdempotencyKeyRef.current = null;
     setIsDirty(true);
     setSaveState("idle");
   }
@@ -241,6 +357,8 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
   async function handleSaveNote() {
     setIsSavingNote(true);
     setErrorMessage(null);
+    const idempotencyKey = lastSaveIdempotencyKeyRef.current ?? crypto.randomUUID();
+    lastSaveIdempotencyKeyRef.current = idempotencyKey;
     try {
       await saveEncounterNote(encounterId, {
         subjective: draft.subjective,
@@ -248,9 +366,11 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         assessment: draft.assessment,
         plan: draft.plan,
         icd10_codes: draft.selected_icd10_codes,
-        generation_metadata: { source: "phase4_workspace_manual_save" },
+        idempotency_key: idempotencyKey,
+        generation_metadata: { source: "phase6_workspace_manual_save" },
       });
       await refreshEncounterDetails();
+      lastSaveIdempotencyKeyRef.current = null;
     } catch (error) {
       if (error instanceof ApiError) {
         setErrorMessage(error.message);
@@ -283,6 +403,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         },
         (streamEvent) => {
           if (streamEvent.event === "generation_started") {
+            lastSaveIdempotencyKeyRef.current = null;
             setDraft((current) => ({
               ...current,
               subjective: "",
@@ -375,6 +496,39 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
     { field: "assessment", label: "Assessment", rows: 5 },
     { field: "plan", label: "Plan", rows: 5 },
   ];
+
+  function renderVersionAuthor(version: NoteVersion): string {
+    if (version.saved_by_user.first_name || version.saved_by_user.last_name) {
+      return `${version.saved_by_user.first_name ?? ""} ${version.saved_by_user.last_name ?? ""}`.trim();
+    }
+    return version.saved_by_user.email;
+  }
+
+  const comparisonVersion =
+    comparisonVersionId && selectedVersion
+      ? (versions.find((version) => version.id === comparisonVersionId) ?? null)
+      : null;
+
+  const comparisonSections = selectedVersion
+    ? [
+        {
+          label: "Subjective",
+          ...getChangedSegments(comparisonVersion?.subjective, selectedVersion.subjective),
+        },
+        {
+          label: "Objective",
+          ...getChangedSegments(comparisonVersion?.objective, selectedVersion.objective),
+        },
+        {
+          label: "Assessment",
+          ...getChangedSegments(comparisonVersion?.assessment, selectedVersion.assessment),
+        },
+        {
+          label: "Plan",
+          ...getChangedSegments(comparisonVersion?.plan, selectedVersion.plan),
+        },
+      ]
+    : [];
 
   if (!encounter && saveState === "loading") {
     return (
@@ -569,26 +723,140 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
 
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="font-semibold text-slate-950">Version history</h2>
-            {encounter.versions.length === 0 ? (
+            {versions.length === 0 ? (
               <p className="mt-3 text-sm text-slate-600">
                 No note versions saved yet. Draft autosave is active, but formal note versioning
                 begins when you press Save note version.
               </p>
             ) : (
-              <div className="mt-4 space-y-3">
-                {encounter.versions.map((version) => (
-                  <div
-                    key={version.id}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
-                  >
-                    <p className="text-sm font-semibold text-slate-900">
-                      Version {version.version_number}
-                    </p>
+              <div className="mt-4 space-y-4">
+                <div className="space-y-3">
+                  {versions.map((version) => (
+                    <button
+                      key={version.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVersion(version);
+                      }}
+                      className={`block w-full rounded-lg border px-4 py-3 text-left ${
+                        selectedVersion?.id === version.id
+                          ? "border-slate-900 bg-slate-100"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-slate-900">
+                        Version {version.version_number}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Saved {formatDateTime(version.saved_at)} by {renderVersionAuthor(version)}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedVersion ? (
+                  <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    <h3 className="font-semibold text-slate-950">
+                      Version {selectedVersion.version_number} details
+                    </h3>
                     <p className="mt-1 text-sm text-slate-600">
-                      Saved {formatDateTime(version.saved_at)}
+                      Saved {formatDateTime(selectedVersion.saved_at)} by{" "}
+                      {renderVersionAuthor(selectedVersion)}
                     </p>
+                    {[
+                      ["Subjective", selectedVersion.subjective],
+                      ["Objective", selectedVersion.objective],
+                      ["Assessment", selectedVersion.assessment],
+                      ["Plan", selectedVersion.plan],
+                    ].map(([label, value]) => (
+                      <div key={label} className="mt-4">
+                        <p className="text-sm font-semibold text-slate-800">{label}</p>
+                        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap text-slate-700">
+                          {value || "No content saved for this section."}
+                        </div>
+                      </div>
+                    ))}
+
+                    {versions.length > 1 ? (
+                      <div className="mt-6 border-t border-slate-200 pt-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-900">
+                              Version comparison
+                            </h4>
+                            <p className="mt-1 text-sm text-slate-600">
+                              Compare this saved version against another version.
+                            </p>
+                          </div>
+
+                          <div className="min-w-64">
+                            <label
+                              htmlFor="comparison-version"
+                              className="block text-sm font-semibold text-slate-800"
+                            >
+                              Compare against
+                            </label>
+                            <select
+                              id="comparison-version"
+                              value={comparisonVersionId}
+                              onChange={(event) => setComparisonVersionId(event.target.value)}
+                              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                            >
+                              {versions
+                                .filter((version) => version.id !== selectedVersion.id)
+                                .map((version) => (
+                                  <option key={version.id} value={version.id}>
+                                    Version {version.version_number} •{" "}
+                                    {formatDateTime(version.saved_at)}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {comparisonVersion ? (
+                          <div className="mt-4 space-y-4">
+                            {comparisonSections.map((section) => (
+                              <div
+                                key={section.label}
+                                className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                              >
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {section.label}
+                                </p>
+
+                                {!section.changed ? (
+                                  <p className="mt-2 text-sm text-slate-600">
+                                    No changes between these versions for this section.
+                                  </p>
+                                ) : (
+                                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                                    <div>
+                                      <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
+                                        Removed
+                                      </p>
+                                      <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm whitespace-pre-wrap text-red-900">
+                                        {section.removed || "No removed content."}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-semibold tracking-wide text-emerald-700 uppercase">
+                                        Added
+                                      </p>
+                                      <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap text-emerald-900">
+                                        {section.added || "No added content."}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                ))}
+                ) : null}
               </div>
             )}
           </div>
