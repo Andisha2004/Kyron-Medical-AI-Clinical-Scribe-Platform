@@ -1017,250 +1017,270 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
               </select>
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">Draft revision</p>
-              <p className="mt-2 text-sm text-slate-600">
-                {baseRevision ?? encounter.draft?.draft_revision ?? 1}
-              </p>
+              <p className="text-sm font-semibold text-slate-800">Autosave status</p>
+              <p className="mt-2 text-sm text-slate-600">{persistenceStatus.label}</p>
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">Suggested workflow</p>
+              <p className="text-sm font-semibold text-slate-800">Current note state</p>
               <p className="mt-2 text-sm text-slate-600">
-                1. Add transcript or observations. 2. Generate or edit the SOAP note. 3. Save a note
-                version when ready.
+                Drafts stay editable. Save note version when you want a formal checkpoint.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-semibold text-slate-950">SOAP note</h2>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => void handleGenerateNote()}
-                disabled={isGenerating || accountDeactivated}
-                data-testid="generate-note-button"
-              >
-                {isGenerating ? "Generating..." : "Generate SOAP note"}
-              </Button>
-              <Button
-                onClick={() => void handleSaveNote()}
-                disabled={isSavingNote || accountDeactivated}
-                data-testid="save-note-button"
-              >
-                {isSavingNote ? "Saving note..." : "Save note version"}
-              </Button>
-            </div>
-          </div>
-
-          <p className="mt-3 text-sm text-slate-600">
-            This is the main note area. You can type directly here, or fill in the transcript below
-            and press Generate SOAP note to draft the sections for you.
-          </p>
-
-          {soapSections.map(({ field, label, rows }) => (
-            <div key={field} className="mt-5">
-              <label className="block text-sm font-semibold text-slate-800">{label}</label>
-              <textarea
-                rows={rows}
-                value={draft[field]}
-                data-testid={`${field}-input`}
-                onChange={(event) => updateField(field, event.target.value)}
-                disabled={accountDeactivated}
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-                placeholder={`Enter ${label.toLowerCase()} content.`}
-              />
-            </div>
-          ))}
-
-          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h3 className="font-semibold text-slate-950">Selected ICD-10 codes</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              These codes are saved with the assessment and included in note versions.
-            </p>
-
-            {draft.selected_icd10_codes.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-600">No ICD-10 codes selected yet.</p>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {draft.selected_icd10_codes.map((codeEntry) => (
-                  <div
-                    key={codeEntry.code}
-                    className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{codeEntry.code}</p>
-                      <p className="mt-1 text-sm text-slate-600">{codeEntry.description}</p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      className="shrink-0"
-                      onClick={() => removeSelectedIcdCode(codeEntry.code)}
-                      disabled={accountDeactivated}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
+        <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+          <div className="space-y-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-semibold text-slate-950">Capture encounter source</h2>
+                <StatusBadge label="Step 1" status="neutral" />
               </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="font-semibold text-slate-950">Transcript and observations</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Use this section to capture what happened in the encounter. The SOAP note above becomes
-            much easier to generate and review once this input is filled in.
-          </p>
-
-          <div className="mt-5">
-            <label className="block text-sm font-semibold text-slate-800">Transcript</label>
-            <textarea
-              rows={8}
-              value={draft.transcript}
-              data-testid="transcript-input"
-              onChange={(event) => updateField("transcript", event.target.value)}
-              disabled={accountDeactivated}
-              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-              placeholder="Paste or type the encounter transcript here."
-            />
-          </div>
-
-          <div className="mt-5">
-            <label className="block text-sm font-semibold text-slate-800">
-              Clinical observations
-            </label>
-            <textarea
-              rows={5}
-              value={draft.observations}
-              data-testid="observations-input"
-              onChange={(event) => updateField("observations", event.target.value)}
-              disabled={accountDeactivated}
-              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-              placeholder="Add findings, context, or other clinical details that may not appear in the transcript."
-            />
-          </div>
-        </div>
-
-        <details className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <summary className="cursor-pointer list-none font-semibold text-slate-950">
-            ICD-10 search and coding support
-          </summary>
-          <p className="mt-2 text-sm text-slate-600">
-            Search for a diagnosis code after you know what should go into the assessment.
-          </p>
-
-          {publicEnv.enableIcdSearch ? (
-            <div className="mt-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="font-semibold text-slate-950">ICD-10 search</h2>
               <p className="mt-2 text-sm text-slate-600">
-                Search by code, diagnosis name, or a plain-English phrase such as &quot;right knee
-                arthritis&quot;.
+                Start here. Add the conversation and exam details first, then review the SOAP note
+                on the right.
               </p>
 
-              <div className="mt-4">
-                <label htmlFor="icd-search" className="block text-sm font-semibold text-slate-800">
-                  Search query
-                </label>
-                <input
-                  id="icd-search"
-                  type="text"
-                  value={icdQuery}
-                  data-testid="icd-search-input"
-                  onChange={(event) => setIcdQuery(event.target.value)}
+              <div className="mt-5">
+                <label className="block text-sm font-semibold text-slate-800">Transcript</label>
+                <textarea
+                  rows={10}
+                  value={draft.transcript}
+                  data-testid="transcript-input"
+                  onChange={(event) => updateField("transcript", event.target.value)}
                   disabled={accountDeactivated}
-                  placeholder="Search ICD-10 codes"
                   className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  placeholder="Paste or type the encounter transcript here. This can come from manual typing or live dictation."
                 />
+                <p className="mt-2 text-sm text-slate-500">
+                  The transcript captures what was said during the visit. Voice editing does not
+                  create the transcript; it only revises the SOAP note later.
+                </p>
               </div>
 
-              {isSearchingIcd ? (
-                <p className="mt-4 text-sm text-slate-600">Searching ICD-10 dataset...</p>
-              ) : null}
-
-              {icdSearchError ? (
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {icdSearchError}
+              {publicEnv.enableRealtimeTranscript && !accountDeactivated ? (
+                <div className="mt-6 border-t border-slate-200 pt-6">
+                  <h3 className="font-semibold text-slate-950">Live dictation</h3>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Optional. Use this if you want speech-to-text to build the transcript instead of
+                    typing it manually.
+                  </p>
+                  <div className="mt-4">
+                    <DictationPanel
+                      encounterId={encounterId}
+                      baseRevision={baseRevision}
+                      onDraftApplied={handleRealtimeDraftApplied}
+                      onError={setErrorMessage}
+                    />
+                  </div>
                 </div>
               ) : null}
 
-              {!isSearchingIcd &&
-              icdQuery.trim().length >= 2 &&
-              icdResults.length === 0 &&
-              !icdSearchError ? (
-                <p className="mt-4 text-sm text-slate-600">No matching ICD-10 codes found.</p>
-              ) : null}
+              <div className="mt-6 border-t border-slate-200 pt-6">
+                <h3 className="font-semibold text-slate-950">Clinical observations</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Add exam findings, vitals, results, and anything clinically important that may not
+                  appear in the transcript.
+                </p>
+                <textarea
+                  rows={6}
+                  value={draft.observations}
+                  data-testid="observations-input"
+                  onChange={(event) => updateField("observations", event.target.value)}
+                  disabled={accountDeactivated}
+                  className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  placeholder="Example: BP 138/86, lungs clear, no respiratory distress, mild pharyngeal erythema."
+                />
+              </div>
+            </div>
+          </div>
 
-              {icdResults.length > 0 ? (
-                <div className="mt-4 space-y-3">
-                  {icdResults.map((result) => {
-                    const isAlreadySelected = draft.selected_icd10_codes.some(
-                      (item) => item.code === result.code,
-                    );
+          <div className="space-y-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-slate-950">SOAP note</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Step 2. Generate or write the note, then review every section before saving.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleGenerateNote()}
+                    disabled={isGenerating || accountDeactivated}
+                    data-testid="generate-note-button"
+                  >
+                    {isGenerating ? "Generating..." : "Generate SOAP note"}
+                  </Button>
+                  <Button
+                    onClick={() => void handleSaveNote()}
+                    disabled={isSavingNote || accountDeactivated}
+                    data-testid="save-note-button"
+                  >
+                    {isSavingNote ? "Saving note..." : "Save note version"}
+                  </Button>
+                </div>
+              </div>
 
-                    return (
+              <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                AI-generated draft. Provider review is required before finalization.
+              </div>
+
+              <p className="mt-4 text-sm text-slate-600">
+                You can type directly in these sections. If transcript and observations are filled
+                in, Generate SOAP note will draft the sections for you.
+              </p>
+
+              {soapSections.map(({ field, label, rows }) => (
+                <div key={field} className="mt-5">
+                  <label className="block text-sm font-semibold text-slate-800">{label}</label>
+                  <textarea
+                    rows={rows}
+                    value={draft[field]}
+                    data-testid={`${field}-input`}
+                    onChange={(event) => updateField(field, event.target.value)}
+                    disabled={accountDeactivated}
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                    placeholder={`Enter ${label.toLowerCase()} content.`}
+                  />
+                </div>
+              ))}
+
+              <div className="mt-6 border-t border-slate-200 pt-6">
+                <h3 className="font-semibold text-slate-950">Selected ICD-10 codes</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Step 3. Confirm diagnosis codes after you know what belongs in the Assessment.
+                </p>
+
+                {draft.selected_icd10_codes.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-600">No ICD-10 codes selected yet.</p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {draft.selected_icd10_codes.map((codeEntry) => (
                       <div
-                        key={result.code}
+                        key={codeEntry.code}
                         className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
                       >
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {result.code}
-                            {result.category ? ` • ${result.category}` : ""}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-600">{result.description}</p>
+                          <p className="text-sm font-semibold text-slate-900">{codeEntry.code}</p>
+                          <p className="mt-1 text-sm text-slate-600">{codeEntry.description}</p>
                         </div>
-
                         <Button
-                          variant={isAlreadySelected ? "secondary" : "primary"}
+                          variant="secondary"
                           className="shrink-0"
-                          onClick={() => addSelectedIcdCode(result)}
-                          data-testid={`add-icd-${result.code}`}
-                          disabled={isAlreadySelected || accountDeactivated}
+                          onClick={() => removeSelectedIcdCode(codeEntry.code)}
+                          disabled={accountDeactivated}
                         >
-                          {isAlreadySelected ? "Added" : "Add to assessment"}
+                          Remove
                         </Button>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+                )}
+
+                {publicEnv.enableIcdSearch ? (
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+                    <h4 className="font-semibold text-slate-950">ICD-10 search</h4>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Search by code, diagnosis name, or a plain-English phrase such as &quot;right
+                      knee arthritis&quot;.
+                    </p>
+
+                    <div className="mt-4">
+                      <label
+                        htmlFor="icd-search"
+                        className="block text-sm font-semibold text-slate-800"
+                      >
+                        Search query
+                      </label>
+                      <input
+                        id="icd-search"
+                        type="text"
+                        value={icdQuery}
+                        data-testid="icd-search-input"
+                        onChange={(event) => setIcdQuery(event.target.value)}
+                        disabled={accountDeactivated}
+                        placeholder="Search ICD-10 codes"
+                        className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                      />
+                    </div>
+
+                    {isSearchingIcd ? (
+                      <p className="mt-4 text-sm text-slate-600">Searching ICD-10 dataset...</p>
+                    ) : null}
+
+                    {icdSearchError ? (
+                      <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {icdSearchError}
+                      </div>
+                    ) : null}
+
+                    {!isSearchingIcd &&
+                    icdQuery.trim().length >= 2 &&
+                    icdResults.length === 0 &&
+                    !icdSearchError ? (
+                      <p className="mt-4 text-sm text-slate-600">No matching ICD-10 codes found.</p>
+                    ) : null}
+
+                    {icdResults.length > 0 ? (
+                      <div className="mt-4 space-y-3">
+                        {icdResults.map((result) => {
+                          const isAlreadySelected = draft.selected_icd10_codes.some(
+                            (item) => item.code === result.code,
+                          );
+
+                          return (
+                            <div
+                              key={result.code}
+                              className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {result.code}
+                                  {result.category ? ` • ${result.category}` : ""}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-600">{result.description}</p>
+                              </div>
+
+                              <Button
+                                variant={isAlreadySelected ? "secondary" : "primary"}
+                                className="shrink-0"
+                                onClick={() => addSelectedIcdCode(result)}
+                                data-testid={`add-icd-${result.code}`}
+                                disabled={isAlreadySelected || accountDeactivated}
+                              >
+                                {isAlreadySelected ? "Added" : "Add to assessment"}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              {publicEnv.enableVoiceAgent && !accountDeactivated ? (
+                <div className="mt-6 border-t border-slate-200 pt-6">
+                  <h3 className="font-semibold text-slate-950">Voice editing</h3>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Optional. Use short commands here after a SOAP note already exists.
+                  </p>
+                  <div className="mt-4">
+                    <VoiceEditPanel
+                      encounterId={encounterId}
+                      draft={draft}
+                      baseRevision={baseRevision}
+                      onDraftApplied={handleRealtimeDraftApplied}
+                      onError={setErrorMessage}
+                    />
+                  </div>
                 </div>
               ) : null}
             </div>
-          ) : null}
-        </details>
-
-        <details className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <summary className="cursor-pointer list-none font-semibold text-slate-950">
-            Voice and dictation tools
-          </summary>
-          <p className="mt-2 text-sm text-slate-600">
-            These are optional helpers. If they feel distracting, you can ignore them and work
-            directly with the transcript and SOAP note fields.
-          </p>
-
-          <div className="mt-5 space-y-6">
-            {publicEnv.enableVoiceAgent && !accountDeactivated ? (
-              <VoiceEditPanel
-                encounterId={encounterId}
-                draft={draft}
-                baseRevision={baseRevision}
-                onDraftApplied={handleRealtimeDraftApplied}
-                onError={setErrorMessage}
-              />
-            ) : null}
-
-            {publicEnv.enableRealtimeTranscript && !accountDeactivated ? (
-              <DictationPanel
-                encounterId={encounterId}
-                baseRevision={baseRevision}
-                onDraftApplied={handleRealtimeDraftApplied}
-                onError={setErrorMessage}
-              />
-            ) : null}
           </div>
-        </details>
+        </div>
 
         <div
           className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"

@@ -123,99 +123,64 @@ export function ProviderDashboard() {
             ))}
           </div>
 
-          <div className="mt-8 grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-            <section
-              className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
-              data-testid="provider-encounter-list"
-            >
-              <div className="border-b border-slate-200 px-6 py-4">
-                <h2 className="font-semibold text-slate-950">Continue documentation</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Draft encounters stay editable until you save a version and finalize the note.
+          <section
+            className="mt-8 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+            data-testid="provider-encounter-list"
+          >
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="font-semibold text-slate-950">Continue documentation</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Draft encounters stay editable until you save a version and finalize the note.
+              </p>
+            </div>
+
+            {draftEncounters.length === 0 ? (
+              <div
+                className="px-6 py-10"
+                role="status"
+                aria-live="polite"
+                data-testid="provider-empty-state"
+              >
+                <p className="text-sm font-medium text-slate-900">No draft encounters right now.</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Start a new encounter when the next visit begins.
                 </p>
               </div>
-
-              {draftEncounters.length === 0 ? (
-                <div
-                  className="px-6 py-10"
-                  role="status"
-                  aria-live="polite"
-                  data-testid="provider-empty-state"
-                >
-                  <p className="text-sm font-medium text-slate-900">
-                    No draft encounters right now.
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Start a new encounter to capture the transcript, add observations, review the
-                    SOAP note, and save a formal note version when you are ready.
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-200">
-                  {draftEncounters.map((encounter) => (
-                    <div
-                      key={encounter.id}
-                      className="flex flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="font-semibold text-slate-950">{encounter.patient_name}</h3>
-                          <StatusBadge label="Draft" status="warning" />
-                        </div>
-                        <p className="mt-2 text-sm text-slate-600">
-                          Template: {encounter.template_name}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Encounter date: {formatDateTime(encounter.encounter_date)}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Last updated: {formatDateTime(encounter.last_updated_at)}
-                        </p>
+            ) : (
+              <div className="divide-y divide-slate-200">
+                {draftEncounters.map((encounter) => (
+                  <div
+                    key={encounter.id}
+                    className="flex flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="font-semibold text-slate-950">{encounter.patient_name}</h3>
+                        <StatusBadge label="Draft" status="warning" />
                       </div>
-
-                      <Link
-                        href={`/provider/encounters/${encounter.id}`}
-                        data-testid={`open-encounter-${encounter.id}`}
-                        className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                      >
-                        Resume encounter
-                      </Link>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Template: {encounter.template_name}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Encounter date: {formatDateTime(encounter.encounter_date)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Last updated: {formatDateTime(encounter.last_updated_at)}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
 
-            <div className="space-y-6">
-              <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="font-semibold text-slate-950">Recommended workflow</h2>
-                <ol className="mt-4 space-y-3 text-sm text-slate-600">
-                  <li>1. Start a new encounter and confirm the patient and template.</li>
-                  <li>2. Capture the visit with transcript and clinical observations.</li>
-                  <li>3. Generate or write the SOAP note, then review every section.</li>
-                  <li>4. Confirm ICD-10 codes, save a version, and finalize when ready.</li>
-                </ol>
-              </section>
-
-              <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="font-semibold text-slate-950">What happens next</h2>
-                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-medium text-slate-900">New encounter</p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Create the encounter first, then move into transcript capture, SOAP drafting,
-                    coding, and final review.
-                  </p>
-                </div>
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-medium text-slate-900">Draft encounter</p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Drafts autosave as you work. A permanent checkpoint is created only when you
-                    press Save note version.
-                  </p>
-                </div>
-              </section>
-            </div>
-          </div>
+                    <Link
+                      href={`/provider/encounters/${encounter.id}`}
+                      data-testid={`open-encounter-${encounter.id}`}
+                      className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                    >
+                      Resume encounter
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           <section className="mt-8 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-6 py-4">
