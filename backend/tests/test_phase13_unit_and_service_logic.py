@@ -144,7 +144,7 @@ def test_dictation_patch_application_and_voice_patch_application() -> None:
     assert "Continue home exercises." in (draft.plan or "")
 
     voice_service = VoiceEditService()
-    updated_section, updated_text = voice_service.apply_operation(
+    updated_section, updated_text, changed = voice_service.apply_operation(
         draft,
         VoiceEditOperation(
             operation="move",
@@ -156,6 +156,7 @@ def test_dictation_patch_application_and_voice_patch_application() -> None:
     assert updated_section == "subjective"
     assert "Mild swelling noted." in updated_text
     assert "Mild swelling noted." not in (draft.objective or "")
+    assert changed is True
 
 
 def test_voice_service_interprets_natural_spoken_note_content_as_append() -> None:
@@ -179,6 +180,50 @@ def test_voice_service_interprets_natural_spoken_note_content_as_append() -> Non
     assert operation.operation == "append"
     assert operation.target_section == "subjective"
     assert operation.new_text == "Patient reports they are having very high fever and cannot sleep."
+
+
+def test_voice_service_rejects_meta_rewrite_requests_without_a_model() -> None:
+    draft = EncounterDraft(
+        encounter_id="encounter-id",
+        transcript="",
+        subjective="Patient reports cough.",
+        objective="",
+        assessment="",
+        plan="",
+        selected_icd10_codes=[],
+        draft_revision=1,
+    )
+
+    voice_service = VoiceEditService()
+
+    with pytest.raises(HTTPException) as exc_info:
+        voice_service.interpret_command("add all the notes to the soap notes and make it better", draft)
+
+    assert exc_info.value.status_code == 422
+    assert "rewrite-style model" in str(exc_info.value.detail)
+
+
+def test_voice_service_shorten_reports_when_text_is_already_concise() -> None:
+    draft = EncounterDraft(
+        encounter_id="encounter-id",
+        transcript="",
+        subjective="",
+        objective="",
+        assessment="",
+        plan="Recommend supportive care.",
+        selected_icd10_codes=[],
+        draft_revision=1,
+    )
+
+    voice_service = VoiceEditService()
+    operation = voice_service.interpret_command("Shorten the Plan", draft)
+    updated_section, updated_text, changed = voice_service.apply_operation(draft, operation)
+    response = voice_service.build_assistant_response(operation, updated_section, changed)
+
+    assert updated_section == "plan"
+    assert updated_text == "Recommend supportive care."
+    assert changed is False
+    assert response == "Plan was already concise, so I left it unchanged."
 
 
 def test_icd_ranking_prefers_exact_code_matches() -> None:

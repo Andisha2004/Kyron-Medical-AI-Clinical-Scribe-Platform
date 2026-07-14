@@ -227,7 +227,8 @@ export function VoiceEditPanel({
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
         This is a note-editing command tool, not patient dictation. It works best with commands like
         &quot;Add that the patient denies fever&quot;, &quot;Move the knee pain into
-        Subjective&quot;, or &quot;Shorten the Plan&quot;.
+        Subjective&quot;, or &quot;Shorten the Plan&quot;. Broad requests like &quot;make the SOAP
+        note better&quot; need a local or cloud LLM and are not handled by the rule-based fallback.
       </div>
 
       <div className="flex flex-wrap gap-3">

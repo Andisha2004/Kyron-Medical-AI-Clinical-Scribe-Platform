@@ -140,6 +140,7 @@ async def test_voice_command_shorten_plan(client, db_session):
         "Continue medication instructions. Follow up in four weeks. Return earlier if worse."
     )
     assert len(payload["draft"]["plan"]) < original_length
+    assert payload["assistant_response"] == "I shortened Plan."
 
 
 @pytest.mark.asyncio
@@ -174,3 +175,9 @@ async def test_voice_command_rejects_ambiguous_or_unsupported_requests(client, d
         json={"command": "Translate this note to Spanish", "base_revision": 1},
     )
     assert unsupported_response.status_code == 422
+
+    rewrite_response = await client.post(
+        f"/api/voice/encounters/{encounter.id}/commands",
+        json={"command": "Add all the notes to the SOAP notes and make it better", "base_revision": 1},
+    )
+    assert rewrite_response.status_code == 422

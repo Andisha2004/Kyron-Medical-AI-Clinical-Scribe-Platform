@@ -18,6 +18,7 @@ class VoiceEditResult:
     operation: VoiceEditOperation
     updated_section: SoapSection
     updated_text: str
+    changed: bool
     assistant_response: str
     draft: EncounterDraft
 
@@ -63,7 +64,7 @@ class VoiceEditService:
             )
 
         operation = self.interpret_command(payload.command, draft)
-        updated_section, updated_text = self.apply_operation(draft, operation)
+        updated_section, updated_text, changed = self.apply_operation(draft, operation)
 
         encounter.updated_at = draft.updated_at
         await AuditService.log_event(
@@ -85,13 +86,24 @@ class VoiceEditService:
             operation=operation,
             updated_section=updated_section,
             updated_text=updated_text,
-            assistant_response=self.build_assistant_response(operation, updated_section),
+            changed=changed,
+            assistant_response=self.build_assistant_response(operation, updated_section, changed),
             draft=draft,
         )
 
     def interpret_command(self, command: str, draft: EncounterDraft) -> VoiceEditOperation:
         normalized_command = " ".join(command.strip().split())
         lowered = normalized_command.lower().rstrip(".")
+
+        if self.is_meta_revision_request(lowered):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This request needs a rewrite-style model and is too broad for the local "
+                    "rule-based editor. Use a specific command like 'Add that the patient denies "
+                    "fever', 'Move the knee pain into Subjective', or 'Shorten the Plan.'"
+                ),
+            )
 
         add_match = re.match(
             r"^(?:add|append|include)(?: that)? (.+?)(?: (?:to|into) (?:the )?(subjective|objective|assessment|plan))?$",
@@ -221,6 +233,12 @@ class VoiceEditService:
         content_markers = (
             "patient ",
             "the patient ",
+            "patient is saying that ",
+            "patient says that ",
+            "patient said that ",
+            "the patient is saying that ",
+            "the patient says that ",
+            "the patient said that ",
             "provider ",
             "exam ",
             "examination ",
@@ -233,9 +251,24 @@ class VoiceEditService:
             "complains ",
             "follow up ",
         )
-        return lowered.startswith(content_markers) or any(
-            marker in lowered for marker in (" fever", " pain", " cough", " chills", " nausea")
+        return lowered.startswith(content_markers)
+
+    def is_meta_revision_request(self, command: str) -> bool:
+        lowered = command.strip().lower()
+        meta_phrases = (
+            "make it better",
+            "improve this",
+            "improve the note",
+            "fix the note",
+            "rewrite the note",
+            "rewrite this note",
+            "clean up the note",
+            "add all the notes",
+            "soap note",
+            "soap notes",
+            "summarize everything",
         )
+        return any(phrase in lowered for phrase in meta_phrases)
 
     def normalize_spoken_content(self, command: str) -> str:
         cleaned = " ".join(command.strip().split())
@@ -385,19 +418,19 @@ class VoiceEditService:
         self,
         draft: EncounterDraft,
         operation: VoiceEditOperation,
-    ) -> tuple[SoapSection, str]:
+    ) -> tuple[SoapSection, str, bool]:
         if operation.operation == "append":
             assert operation.target_section and operation.new_text
             current = self.get_section_text(draft, operation.target_section)
             if operation.new_text.lower() in current.lower():
-                return operation.target_section, current
+                return operation.target_section, current, False
             updated = current.rstrip()
             if updated:
                 updated = f"{updated}\n{operation.new_text}"
             else:
                 updated = operation.new_text
             self.set_section_text(draft, operation.target_section, updated)
-            return operation.target_section, updated
+            return operation.target_section, updated, True
 
         if operation.operation == "replace":
             assert operation.target_section and operation.target_text and operation.new_text
@@ -411,14 +444,14 @@ class VoiceEditService:
                 current, operation.target_text, operation.new_text
             )
             self.set_section_text(draft, operation.target_section, updated)
-            return operation.target_section, updated
+            return operation.target_section, updated, updated != current
 
         if operation.operation == "remove":
             assert operation.target_section and operation.target_text
             current = self.get_section_text(draft, operation.target_section)
             updated = self.remove_first_case_insensitive(current, operation.target_text)
             self.set_section_text(draft, operation.target_section, updated)
-            return operation.target_section, updated
+            return operation.target_section, updated, updated != current
 
         if operation.operation == "move":
             assert operation.source_section and operation.target_section and operation.target_text
@@ -432,14 +465,14 @@ class VoiceEditService:
                 f"{target}\n{matched_text}" if target else matched_text
             )
             self.set_section_text(draft, operation.target_section, updated_target)
-            return operation.target_section, updated_target
+            return operation.target_section, updated_target, updated_target != target
 
         if operation.operation == "shorten":
             assert operation.target_section
             current = self.get_section_text(draft, operation.target_section)
             updated = self.shorten_section_text(current)
             self.set_section_text(draft, operation.target_section, updated)
-            return operation.target_section, updated
+            return operation.target_section, updated, updated != current
 
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -509,7 +542,15 @@ class VoiceEditService:
         self,
         operation: VoiceEditOperation,
         updated_section: SoapSection,
+        changed: bool,
     ) -> str:
+        if not changed:
+            if operation.operation == "append":
+                return f"That content was already in {updated_section.title()}, so I left it unchanged."
+            if operation.operation == "shorten":
+                return f"{updated_section.title()} was already concise, so I left it unchanged."
+            return f"I reviewed {updated_section.title()}, but nothing changed."
+
         if operation.operation == "append":
             return f"I added that to {updated_section.title()}."
         if operation.operation == "move":
