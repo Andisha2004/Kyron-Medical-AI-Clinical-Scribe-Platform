@@ -1,0 +1,12 @@
+.next
+node_modules
+coverage
+dist
+build
+out
+package-lock.json
+public
+.env
+.env.local
+.env.development
+.env.production
