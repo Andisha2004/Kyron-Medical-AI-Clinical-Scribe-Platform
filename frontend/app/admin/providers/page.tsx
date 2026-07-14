@@ -20,11 +20,17 @@ export default function AdminProvidersPage() {
   const [providers, setProviders] = useState<AdminProviderSummary[]>([]);
   const [form, setForm] = useState<CreateProviderRequest>(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function loadProviders() {
-    const response = await getAdminProviders();
-    setProviders(response);
+    setIsLoadingProviders(true);
+    try {
+      const response = await getAdminProviders();
+      setProviders(response);
+    } finally {
+      setIsLoadingProviders(false);
+    }
   }
 
   useEffect(() => {
@@ -97,16 +103,24 @@ export default function AdminProvidersPage() {
       />
 
       {errorMessage ? (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          role="alert"
+        >
           {errorMessage}
         </div>
       ) : null}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="font-semibold text-slate-950">Providers</h2>
+          {isLoadingProviders ? (
+            <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
+              Loading providers...
+            </p>
+          ) : null}
           <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-full text-sm" data-testid="admin-provider-table">
               <thead className="text-left text-slate-500">
                 <tr>
                   <th className="pb-3 font-medium">Name</th>
@@ -150,60 +164,114 @@ export default function AdminProvidersPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="font-semibold text-slate-950">Add provider</h2>
-          <form className="mt-4 space-y-4" onSubmit={handleCreateProvider}>
+          <form
+            className="mt-4 space-y-4"
+            onSubmit={handleCreateProvider}
+            data-testid="admin-provider-form"
+          >
             <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="provider-first-name"
+                  className="block text-sm font-semibold text-slate-800"
+                >
+                  First name
+                </label>
+                <input
+                  id="provider-first-name"
+                  data-testid="provider-first-name-input"
+                  value={form.first_name}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, first_name: event.target.value }))
+                  }
+                  placeholder="First name"
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  required
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="provider-last-name"
+                  className="block text-sm font-semibold text-slate-800"
+                >
+                  Last name
+                </label>
+                <input
+                  id="provider-last-name"
+                  data-testid="provider-last-name-input"
+                  value={form.last_name}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, last_name: event.target.value }))
+                  }
+                  placeholder="Last name"
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label
+                htmlFor="provider-email"
+                className="block text-sm font-semibold text-slate-800"
+              >
+                Email
+              </label>
               <input
-                value={form.first_name}
+                id="provider-email"
+                data-testid="provider-email-input"
+                type="email"
+                value={form.email}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, first_name: event.target.value }))
+                  setForm((current) => ({ ...current, email: event.target.value }))
                 }
-                placeholder="First name"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-                required
-              />
-              <input
-                value={form.last_name}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, last_name: event.target.value }))
-                }
-                placeholder="Last name"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                placeholder="Email"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
                 required
               />
             </div>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, email: event.target.value }))
-              }
-              placeholder="Email"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-              required
-            />
-            <input
-              type="text"
-              value={form.specialty}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, specialty: event.target.value }))
-              }
-              placeholder="Specialty"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-            />
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, password: event.target.value }))
-              }
-              placeholder="Temporary password"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-              required
-              minLength={8}
-            />
-            <Button type="submit" disabled={isSubmitting}>
+            <div>
+              <label
+                htmlFor="provider-specialty"
+                className="block text-sm font-semibold text-slate-800"
+              >
+                Specialty
+              </label>
+              <input
+                id="provider-specialty"
+                data-testid="provider-specialty-input"
+                type="text"
+                value={form.specialty}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, specialty: event.target.value }))
+                }
+                placeholder="Specialty"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="provider-password"
+                className="block text-sm font-semibold text-slate-800"
+              >
+                Temporary password
+              </label>
+              <input
+                id="provider-password"
+                data-testid="provider-password-input"
+                type="password"
+                value={form.password}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, password: event.target.value }))
+                }
+                placeholder="Temporary password"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                required
+                minLength={8}
+              />
+            </div>
+            <Button type="submit" disabled={isSubmitting} data-testid="create-provider-button">
               {isSubmitting ? "Creating..." : "Create provider"}
             </Button>
           </form>

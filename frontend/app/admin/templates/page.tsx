@@ -34,10 +34,16 @@ export default function AdminTemplatesPage() {
   const [form, setForm] = useState<TemplateMutationRequest>(createEmptyTemplateForm());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
 
   async function loadTemplates() {
-    const response = await getAdminTemplates();
-    setTemplates(response);
+    setIsLoadingTemplates(true);
+    try {
+      const response = await getAdminTemplates();
+      setTemplates(response);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
   }
 
   useEffect(() => {
@@ -138,26 +144,39 @@ export default function AdminTemplatesPage() {
       />
 
       {errorMessage ? (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          role="alert"
+        >
           {errorMessage}
         </div>
       ) : null}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold text-slate-950">Templates</h2>
-            <Button variant="secondary" onClick={() => setSelectedTemplateId("new")}>
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedTemplateId("new")}
+              data-testid="new-template-button"
+            >
               New template
             </Button>
           </div>
+          {isLoadingTemplates ? (
+            <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
+              Loading templates...
+            </p>
+          ) : null}
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-3" data-testid="template-list">
             {templates.map((template) => (
               <button
                 key={template.id}
                 type="button"
                 onClick={() => setSelectedTemplateId(template.id)}
+                data-testid={`template-option-${template.id}`}
                 className={`block w-full rounded-lg border px-4 py-3 text-left ${
                   selectedTemplateId === template.id
                     ? "border-slate-900 bg-slate-100"
@@ -176,31 +195,51 @@ export default function AdminTemplatesPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="font-semibold text-slate-950">
             {selectedTemplateId === "new" ? "Create template" : "Edit template"}
           </h2>
 
-          <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-            <input
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Template name"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-              required
-            />
-            <textarea
-              value={form.description ?? ""}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, description: event.target.value }))
-              }
-              placeholder="Template description"
-              rows={3}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-            />
+          <form className="mt-4 space-y-4" onSubmit={handleSubmit} data-testid="template-form">
+            <div>
+              <label htmlFor="template-name" className="block text-sm font-semibold text-slate-800">
+                Template name
+              </label>
+              <input
+                id="template-name"
+                data-testid="template-name-input"
+                value={form.name}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Template name"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="template-description"
+                className="block text-sm font-semibold text-slate-800"
+              >
+                Description
+              </label>
+              <textarea
+                id="template-description"
+                data-testid="template-description-input"
+                value={form.description ?? ""}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, description: event.target.value }))
+                }
+                placeholder="Template description"
+                rows={3}
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+              />
+            </div>
 
             <label className="flex items-center gap-3 text-sm text-slate-700">
               <input
+                aria-label="Template is active"
                 type="checkbox"
                 checked={form.is_active}
                 onChange={(event) =>
@@ -220,6 +259,8 @@ export default function AdminTemplatesPage() {
                     {section.section}
                   </p>
                   <textarea
+                    aria-label={`${section.section} instructions`}
+                    data-testid={`template-section-${section.section}`}
                     value={section.instructions}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -241,7 +282,7 @@ export default function AdminTemplatesPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting} data-testid="save-template-button">
                 {isSubmitting
                   ? "Saving..."
                   : selectedTemplateId === "new"
@@ -249,7 +290,12 @@ export default function AdminTemplatesPage() {
                     : "Save changes"}
               </Button>
               {selectedTemplateId !== "new" ? (
-                <Button type="button" variant="danger" onClick={() => void handleDeleteTemplate()}>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => void handleDeleteTemplate()}
+                  data-testid="deactivate-template-button"
+                >
                   Deactivate template
                 </Button>
               ) : null}

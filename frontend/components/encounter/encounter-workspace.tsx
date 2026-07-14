@@ -837,7 +837,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
 
   if (!encounter && saveState === "loading") {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy="true">
         <div className="h-10 w-64 animate-pulse rounded bg-slate-200" />
         <div className="grid gap-6 xl:grid-cols-2">
           <div className="h-80 animate-pulse rounded-xl bg-slate-200" />
@@ -849,7 +849,10 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
 
   if (!encounter) {
     return (
-      <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+      <section
+        className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700"
+        role="alert"
+      >
         {errorMessage || "Unable to open the encounter workspace."}
       </section>
     );
@@ -863,20 +866,38 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
         actions={<StatusBadge label={persistenceStatus.label} status={persistenceStatus.status} />}
       />
 
+      <div className="sr-only" role="status" aria-live="polite" data-testid="workspace-live-status">
+        {persistenceStatus.label}. {generationStatusMessage ?? ""}{" "}
+        {sessionExpired ? "Session expired." : ""}
+        {accountDeactivated ? "Account deactivated." : ""}
+      </div>
+
       {flashMessage ? (
-        <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div
+          className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          role="status"
+        >
           {flashMessage}
         </div>
       ) : null}
 
       {errorMessage ? (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          role="alert"
+          data-testid="workspace-error"
+        >
           {errorMessage}
         </div>
       ) : null}
 
       {generationStatusMessage ? (
-        <div className="mt-6 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+        <div
+          className="mt-6 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800"
+          role="status"
+          aria-live="polite"
+          data-testid="generation-status"
+        >
           {generationStatusMessage}
         </div>
       ) : null}
@@ -969,7 +990,10 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_1fr]">
         <section className="space-y-6">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div
+            className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+            data-testid="version-history-panel"
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold text-slate-950">Encounter details</h2>
               <StatusBadge
@@ -1007,6 +1031,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
             <textarea
               rows={10}
               value={draft.transcript}
+              data-testid="transcript-input"
               onChange={(event) => updateField("transcript", event.target.value)}
               disabled={accountDeactivated}
               className="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
@@ -1017,6 +1042,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
             <textarea
               rows={6}
               value={draft.observations}
+              data-testid="observations-input"
               onChange={(event) => updateField("observations", event.target.value)}
               disabled={accountDeactivated}
               className="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
@@ -1053,12 +1079,14 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                   variant="secondary"
                   onClick={() => void handleGenerateNote()}
                   disabled={isGenerating || accountDeactivated}
+                  data-testid="generate-note-button"
                 >
                   {isGenerating ? "Generating..." : "Generate SOAP note"}
                 </Button>
                 <Button
                   onClick={() => void handleSaveNote()}
                   disabled={isSavingNote || accountDeactivated}
+                  data-testid="save-note-button"
                 >
                   {isSavingNote ? "Saving note..." : "Save note version"}
                 </Button>
@@ -1071,6 +1099,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                 <textarea
                   rows={rows}
                   value={draft[field]}
+                  data-testid={`${field}-input`}
                   onChange={(event) => updateField(field, event.target.value)}
                   disabled={accountDeactivated}
                   className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
@@ -1129,6 +1158,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                   id="icd-search"
                   type="text"
                   value={icdQuery}
+                  data-testid="icd-search-input"
                   onChange={(event) => setIcdQuery(event.target.value)}
                   disabled={accountDeactivated}
                   placeholder="Search ICD-10 codes"
@@ -1177,6 +1207,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                           variant={isAlreadySelected ? "secondary" : "primary"}
                           className="shrink-0"
                           onClick={() => addSelectedIcdCode(result)}
+                          data-testid={`add-icd-${result.code}`}
                           disabled={isAlreadySelected || accountDeactivated}
                         >
                           {isAlreadySelected ? "Added" : "Add to assessment"}
@@ -1223,8 +1254,14 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                 </div>
 
                 {selectedVersion ? (
-                  <div className="rounded-lg border border-slate-200 bg-white p-4">
-                    <h3 className="font-semibold text-slate-950">
+                  <div
+                    className="rounded-lg border border-slate-200 bg-white p-4"
+                    data-testid="selected-version-details"
+                  >
+                    <h3
+                      className="font-semibold text-slate-950"
+                      data-testid="selected-version-heading"
+                    >
                       Version {selectedVersion.version_number} details
                     </h3>
                     <p className="mt-1 text-sm text-slate-600">
@@ -1232,12 +1269,28 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                       {renderVersionAuthor(selectedVersion)}
                     </p>
                     {[
-                      ["Subjective", selectedVersion.subjective],
-                      ["Objective", selectedVersion.objective],
-                      ["Assessment", selectedVersion.assessment],
-                      ["Plan", selectedVersion.plan],
-                    ].map(([label, value]) => (
-                      <div key={label} className="mt-4">
+                      {
+                        label: "Subjective",
+                        value: selectedVersion.subjective,
+                        testId: "selected-version-subjective",
+                      },
+                      {
+                        label: "Objective",
+                        value: selectedVersion.objective,
+                        testId: "selected-version-objective",
+                      },
+                      {
+                        label: "Assessment",
+                        value: selectedVersion.assessment,
+                        testId: "selected-version-assessment",
+                      },
+                      {
+                        label: "Plan",
+                        value: selectedVersion.plan,
+                        testId: "selected-version-plan",
+                      },
+                    ].map(({ label, value, testId }) => (
+                      <div key={label} className="mt-4" data-testid={testId}>
                         <p className="text-sm font-semibold text-slate-800">{label}</p>
                         <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap text-slate-700">
                           {value || "No content saved for this section."}
@@ -1286,6 +1339,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                               id="comparison-version"
                               value={comparisonVersionId}
                               onChange={(event) => setComparisonVersionId(event.target.value)}
+                              data-testid="version-compare-select"
                               className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
                             >
                               {versions
@@ -1305,6 +1359,7 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                             {comparisonSections.map((section) => (
                               <div
                                 key={section.label}
+                                data-testid={`version-diff-${section.label.toLowerCase()}`}
                                 className="rounded-lg border border-slate-200 bg-slate-50 p-4"
                               >
                                 <p className="text-sm font-semibold text-slate-900">
@@ -1321,7 +1376,10 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                                       <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
                                         Removed
                                       </p>
-                                      <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm whitespace-pre-wrap text-red-900">
+                                      <div
+                                        className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm whitespace-pre-wrap text-red-900"
+                                        data-testid={`version-diff-${section.label.toLowerCase()}-removed`}
+                                      >
                                         {section.removed || "No removed content."}
                                       </div>
                                     </div>
@@ -1329,7 +1387,10 @@ export function EncounterWorkspace({ encounterId }: EncounterWorkspaceProps) {
                                       <p className="text-xs font-semibold tracking-wide text-emerald-700 uppercase">
                                         Added
                                       </p>
-                                      <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap text-emerald-900">
+                                      <div
+                                        className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap text-emerald-900"
+                                        data-testid={`version-diff-${section.label.toLowerCase()}-added`}
+                                      >
                                         {section.added || "No added content."}
                                       </div>
                                     </div>

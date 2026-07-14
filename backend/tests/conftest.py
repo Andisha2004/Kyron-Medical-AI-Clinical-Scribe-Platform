@@ -9,6 +9,7 @@ if str(BACKEND_ROOT) not in sys.path:
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.api.dependencies import get_database_session
 from app.core.config import get_settings
@@ -20,7 +21,12 @@ from app.main import app
 @pytest_asyncio.fixture
 async def db_session():
     settings = get_settings()
-    engine = create_async_engine(settings.database_url, pool_pre_ping=True, future=True)
+    engine = create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        future=True,
+        poolclass=NullPool,
+    )
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
@@ -30,6 +36,7 @@ async def db_session():
 
     async with session_factory() as session:
         yield session
+        await session.rollback()
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)

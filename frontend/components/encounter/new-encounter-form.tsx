@@ -120,9 +120,15 @@ export function NewEncounterForm() {
   }
 
   return (
-    <section className="mt-8 max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section
+      className="mt-8 max-w-2xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      data-testid="new-encounter-form"
+    >
       {errorMessage ? (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          role="alert"
+        >
           {errorMessage}
         </div>
       ) : null}
@@ -138,6 +144,7 @@ export function NewEncounterForm() {
               name="firstName"
               type="text"
               value={formState.firstName}
+              data-testid="patient-first-name-input"
               onChange={(event) =>
                 setFormState((current) => ({ ...current, firstName: event.target.value }))
               }
@@ -156,6 +163,7 @@ export function NewEncounterForm() {
               name="lastName"
               type="text"
               value={formState.lastName}
+              data-testid="patient-last-name-input"
               onChange={(event) =>
                 setFormState((current) => ({ ...current, lastName: event.target.value }))
               }
@@ -175,6 +183,7 @@ export function NewEncounterForm() {
             name="dateOfBirth"
             type="date"
             value={formState.dateOfBirth}
+            data-testid="patient-dob-input"
             onChange={(event) =>
               setFormState((current) => ({ ...current, dateOfBirth: event.target.value }))
             }
@@ -191,6 +200,7 @@ export function NewEncounterForm() {
             id="templateId"
             name="templateId"
             value={formState.templateId}
+            data-testid="template-select"
             onChange={(event) =>
               setFormState((current) => ({ ...current, templateId: event.target.value }))
             }
@@ -204,12 +214,16 @@ export function NewEncounterForm() {
               </option>
             ))}
           </select>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
+          <p className="mt-2 text-xs leading-5 text-slate-500" id="new-encounter-template-help">
             Use fictional patient information during development and demos.
           </p>
         </div>
 
-        <Button type="submit" disabled={isSubmitting || isLoadingTemplates || !isFormValid}>
+        <Button
+          type="submit"
+          data-testid="create-encounter-button"
+          disabled={isSubmitting || isLoadingTemplates || !isFormValid}
+        >
           {isSubmitting ? "Creating encounter..." : "Create encounter"}
         </Button>
       </form>

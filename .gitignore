@@ -98,6 +98,9 @@ frontend/dist/
 
 build/
 frontend/build/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.playwright/
 
 npm-debug.log*
 yarn-debug.log*

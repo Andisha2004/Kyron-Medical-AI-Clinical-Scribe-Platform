@@ -6,6 +6,9 @@ build
 out
 package-lock.json
 public
+playwright-report
+test-results
+.playwright
 .env
 .env.local
 .env.development

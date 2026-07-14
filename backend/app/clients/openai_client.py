@@ -1,14 +1,80 @@
 import json
 from dataclasses import dataclass
+import re
 
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.generation import SoapNoteGenerationResult
+from app.schemas.generation import AssessmentItem, SoapNoteGenerationResult
 
 
 class AiClientError(Exception):
     pass
+
+
+@dataclass
+class MockClinicalScribeClient:
+    async def generate_soap_note(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> SoapNoteGenerationResult:
+        prompt = user_prompt.lower()
+
+        patient_history_match = re.search(r"relevant prior patient history:\n(.+)$", prompt, re.DOTALL)
+        patient_history = patient_history_match.group(1).strip() if patient_history_match else ""
+
+        if "knee" in prompt:
+            diagnosis = "Right knee osteoarthritis"
+            code = "M17.11"
+            description = "Unilateral primary osteoarthritis, right knee"
+            subjective = "Patient reports chronic right knee pain that worsens with stairs."
+            objective = "No objective examination findings were documented."
+            plan = "Continue physical therapy, encourage home exercises, and follow up in four weeks."
+        elif "cough" in prompt or "sore throat" in prompt:
+            diagnosis = "Upper respiratory infection"
+            code = "J06.9"
+            description = "Acute upper respiratory infection, unspecified"
+            subjective = "Patient reports cough and sore throat for several days and denies fever."
+            objective = "No objective measurements were documented."
+            plan = "Recommend supportive care, hydration, and return precautions if symptoms worsen."
+        else:
+            diagnosis = "General follow-up evaluation"
+            code = "Z09"
+            description = "Follow-up examination after treatment"
+            subjective = "Patient reports ongoing symptoms requiring follow-up assessment."
+            objective = "No objective examination findings were documented."
+            plan = "Continue monitoring symptoms and follow up as clinically indicated."
+
+        if "denies fever" in prompt and "denies fever" not in subjective.lower():
+            subjective += " The patient denies fever."
+
+        if "physical therapy" in patient_history:
+            subjective += " The patient is returning after physical therapy with partial improvement."
+
+        warnings: list[str] = []
+        missing_information: list[str] = []
+        if "no exam findings" in prompt or "not provided" in prompt:
+            missing_information.append("Objective examination details were not provided.")
+
+        if "blood pressure" in prompt and "objective" not in prompt:
+            warnings.append("Vital signs were mentioned without a structured objective section.")
+
+        return SoapNoteGenerationResult(
+            subjective=subjective,
+            objective=objective,
+            assessment=[
+                AssessmentItem(
+                    diagnosis=diagnosis,
+                    icd10_code=code,
+                    description=description,
+                )
+            ],
+            plan=plan,
+            missing_information=missing_information,
+            warnings=warnings,
+        )
 
 
 @dataclass
@@ -111,8 +177,10 @@ class OpenAIClinicalScribeClient:
         raise AiClientError("The AI note generation service is unavailable right now. Please retry.")
 
 
-def get_openai_clinical_scribe_client() -> OpenAIClinicalScribeClient:
+def get_openai_clinical_scribe_client() -> OpenAIClinicalScribeClient | MockClinicalScribeClient:
     settings = get_settings()
+    if settings.llm_provider == "mock":
+        return MockClinicalScribeClient()
     return OpenAIClinicalScribeClient(
         timeout_seconds=settings.openai_timeout_seconds,
         max_retries=settings.openai_max_retries,

@@ -24,6 +24,7 @@ export default function AdminEncountersPage() {
   const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoadingEncounters, setIsLoadingEncounters] = useState(true);
 
   useEffect(() => {
     void getAdminProviders()
@@ -32,6 +33,7 @@ export default function AdminEncountersPage() {
   }, []);
 
   useEffect(() => {
+    setIsLoadingEncounters(true);
     void getAdminEncounters({
       provider_id: providerId || undefined,
       start_date: startDate || undefined,
@@ -48,7 +50,8 @@ export default function AdminEncountersPage() {
         } else {
           setErrorMessage("Unable to load encounters.");
         }
-      });
+      })
+      .finally(() => setIsLoadingEncounters(false));
   }, [providerId, startDate, endDate, page]);
 
   const totalPages = encounters
@@ -63,46 +66,77 @@ export default function AdminEncountersPage() {
       />
 
       {errorMessage ? (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          role="alert"
+        >
           {errorMessage}
         </div>
       ) : null}
 
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-4">
-          <select
-            value={providerId}
-            onChange={(event) => {
-              setProviderId(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-          >
-            <option value="">All providers</option>
-            {providers.map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                {provider.first_name} {provider.last_name}
-              </option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(event) => {
-              setStartDate(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-          />
-          <input
-            type="date"
-            value={endDate}
-            onChange={(event) => {
-              setEndDate(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-          />
+          <div>
+            <label
+              htmlFor="encounter-provider-filter"
+              className="block text-sm font-semibold text-slate-800"
+            >
+              Provider
+            </label>
+            <select
+              id="encounter-provider-filter"
+              data-testid="encounter-provider-filter"
+              value={providerId}
+              onChange={(event) => {
+                setProviderId(event.target.value);
+                setPage(1);
+              }}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+            >
+              <option value="">All providers</option>
+              {providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.first_name} {provider.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="encounter-start-date"
+              className="block text-sm font-semibold text-slate-800"
+            >
+              Start date
+            </label>
+            <input
+              id="encounter-start-date"
+              type="date"
+              value={startDate}
+              onChange={(event) => {
+                setStartDate(event.target.value);
+                setPage(1);
+              }}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="encounter-end-date"
+              className="block text-sm font-semibold text-slate-800"
+            >
+              End date
+            </label>
+            <input
+              id="encounter-end-date"
+              type="date"
+              value={endDate}
+              onChange={(event) => {
+                setEndDate(event.target.value);
+                setPage(1);
+              }}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+            />
+          </div>
           <Button
             variant="secondary"
             onClick={() => {
@@ -111,13 +145,19 @@ export default function AdminEncountersPage() {
               setEndDate("");
               setPage(1);
             }}
+            className="self-end"
           >
             Clear filters
           </Button>
         </div>
+        {isLoadingEncounters ? (
+          <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
+            Loading encounters...
+          </p>
+        ) : null}
 
         <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-sm" data-testid="admin-encounters-table">
             <thead className="text-left text-slate-500">
               <tr>
                 <th className="pb-3 font-medium">Patient</th>

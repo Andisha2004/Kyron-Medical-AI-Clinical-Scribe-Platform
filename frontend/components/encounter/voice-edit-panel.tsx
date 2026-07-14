@@ -223,7 +223,10 @@ export function VoiceEditPanel({
     .join(" • ");
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      data-testid="voice-edit-panel"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold text-slate-950">Voice editing</h2>
@@ -239,10 +242,16 @@ export function VoiceEditPanel({
             variant="secondary"
             onClick={() => void startVoiceEditing()}
             disabled={isSessionStarting || isListening}
+            data-testid="voice-start-button"
           >
             {isSessionStarting ? "Starting..." : "Start Voice Editing"}
           </Button>
-          <Button variant="secondary" onClick={stopVoiceEditing} disabled={!isListening}>
+          <Button
+            variant="secondary"
+            onClick={stopVoiceEditing}
+            disabled={!isListening}
+            data-testid="voice-stop-button"
+          >
             Stop Voice Editing
           </Button>
         </div>
@@ -260,22 +269,41 @@ export function VoiceEditPanel({
               ? `${voiceSession.provider} • ${voiceSession.connection_method} • ${voiceSession.model}`
               : "Realtime provider not initialized yet."}
           </p>
-          <p className="mt-2 text-xs text-slate-500">
+          <p
+            className="mt-2 text-xs text-slate-500"
+            role="status"
+            aria-live="polite"
+            data-testid="voice-status"
+          >
             {isListening ? "Listening now." : "Not listening."}
             {draftSummary ? ` ${draftSummary}.` : ""}
           </p>
           {interimTranscript ? (
-            <p className="mt-3 rounded-md bg-white px-3 py-2 text-sm text-slate-700">
+            <p
+              className="mt-3 rounded-md bg-white px-3 py-2 text-sm text-slate-700"
+              data-testid="voice-interim-transcript"
+              role="status"
+              aria-live="polite"
+            >
               Interim: {interimTranscript}
             </p>
           ) : null}
           {assistantResponse ? (
-            <p className="mt-3 rounded-md bg-white px-3 py-2 text-sm text-slate-700">
+            <p
+              className="mt-3 rounded-md bg-white px-3 py-2 text-sm text-slate-700"
+              data-testid="voice-assistant-response"
+              role="status"
+              aria-live="polite"
+            >
               Assistant: {assistantResponse}
             </p>
           ) : null}
           {voiceError ? (
-            <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p
+              className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              role="alert"
+              data-testid="voice-error"
+            >
               {voiceError}
             </p>
           ) : null}
@@ -287,6 +315,7 @@ export function VoiceEditPanel({
           </label>
           <textarea
             id="voice-command"
+            data-testid="voice-command-input"
             rows={4}
             value={manualCommand}
             onChange={(event) => setManualCommand(event.target.value)}
@@ -300,6 +329,7 @@ export function VoiceEditPanel({
                 setManualCommand("");
               }}
               disabled={isSubmittingCommand || manualCommand.trim().length < 3}
+              data-testid="voice-apply-command-button"
             >
               {isSubmittingCommand ? "Applying..." : "Apply command"}
             </Button>
@@ -314,7 +344,10 @@ export function VoiceEditPanel({
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div
+        className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+        data-testid="voice-conversation-panel"
+      >
         <p className="text-sm font-semibold text-slate-800">Conversation transcript</p>
         {conversationTurns.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">

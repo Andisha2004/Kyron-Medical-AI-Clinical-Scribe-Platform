@@ -362,7 +362,10 @@ export function DictationPanel({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      data-testid="dictation-panel"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold text-slate-950">Live dictation</h2>
@@ -377,6 +380,7 @@ export function DictationPanel({
             variant="secondary"
             onClick={() => void startDictation()}
             disabled={dictationState === "starting" || dictationState === "listening"}
+            data-testid="dictation-start-button"
           >
             {dictationState === "starting" ? "Starting..." : "Start"}
           </Button>
@@ -384,6 +388,7 @@ export function DictationPanel({
             variant="secondary"
             onClick={pauseDictation}
             disabled={dictationState !== "listening"}
+            data-testid="dictation-pause-button"
           >
             Pause
           </Button>
@@ -391,10 +396,15 @@ export function DictationPanel({
             variant="secondary"
             onClick={() => void resumeDictation()}
             disabled={dictationState !== "paused"}
+            data-testid="dictation-resume-button"
           >
             Resume
           </Button>
-          <Button onClick={() => void stopDictation()} disabled={dictationState === "idle"}>
+          <Button
+            onClick={() => void stopDictation()}
+            disabled={dictationState === "idle"}
+            data-testid="dictation-stop-button"
+          >
             Stop
           </Button>
         </div>
@@ -412,7 +422,12 @@ export function DictationPanel({
               ? `${sessionInfo.provider} • ${sessionInfo.connection_method} • ${sessionInfo.model}`
               : "Dictation session not initialized yet."}
           </p>
-          <p className="mt-2 text-xs text-slate-500">
+          <p
+            className="mt-2 text-xs text-slate-500"
+            role="status"
+            aria-live="polite"
+            data-testid="dictation-status"
+          >
             State: {dictationState}. {syncStatus}
           </p>
           {lastSyncedAt ? (
@@ -421,7 +436,11 @@ export function DictationPanel({
             </p>
           ) : null}
           {dictationError ? (
-            <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p
+              className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              role="alert"
+              data-testid="dictation-error"
+            >
               {dictationError}
             </p>
           ) : null}
@@ -436,6 +455,7 @@ export function DictationPanel({
           </label>
           <textarea
             id="manual-dictation-segment"
+            data-testid="manual-dictation-segment"
             rows={4}
             value={manualSegment}
             onChange={(event) => setManualSegment(event.target.value)}
@@ -447,6 +467,7 @@ export function DictationPanel({
               variant="secondary"
               onClick={() => void submitManualSegment()}
               disabled={manualSegment.trim().length < 3 || isSyncing}
+              data-testid="add-manual-segment-button"
             >
               Add finalized segment
             </Button>
@@ -464,7 +485,12 @@ export function DictationPanel({
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-800">Partial transcript</p>
-          <p className="mt-2 min-h-16 rounded-md bg-white px-3 py-2 text-sm text-slate-700">
+          <p
+            className="mt-2 min-h-16 rounded-md bg-white px-3 py-2 text-sm text-slate-700"
+            data-testid="partial-transcript"
+            role="status"
+            aria-live="polite"
+          >
             {partialTranscript || "Waiting for partial transcript updates."}
           </p>
         </div>
@@ -476,7 +502,7 @@ export function DictationPanel({
               Final transcript segments will appear here after speech is finalized.
             </p>
           ) : (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 space-y-2" data-testid="finalized-segments">
               {finalSegments.slice(-6).map((segment, index) => (
                 <div
                   key={`${segment}-${index}`}
