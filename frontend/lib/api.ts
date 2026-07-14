@@ -23,6 +23,24 @@ export class ApiError extends Error {
 
 function createRequestUrl(path: string, query?: Record<string, QueryValue>): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (publicEnv.apiBaseUrl.startsWith("/")) {
+    const url = new URL(
+      `${publicEnv.apiBaseUrl.replace(/\/$/, "")}${normalizedPath}`,
+      window.location.origin,
+    );
+
+    if (query) {
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+
+    return `${url.pathname}${url.search}`;
+  }
+
   const url = new URL(normalizedPath, publicEnv.apiBaseUrl);
 
   if (query) {
