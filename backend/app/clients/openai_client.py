@@ -232,6 +232,148 @@ class OllamaClinicalScribeClient:
             user_prompt=user_prompt,
             schema_name="soap_note_generation",
         )
+
+        def normalize_text(value: object) -> str:
+            if value is None:
+                return ""
+
+            if isinstance(value, str):
+                return value.strip()
+
+            if isinstance(value, list):
+                return "\n".join(
+                    f"- {normalize_text(item)}"
+                    for item in value
+                    if item is not None
+                )
+
+            if isinstance(value, dict):
+                return "\n".join(
+                    f"{str(key).replace('_', ' ').title()}: {normalize_text(item)}"
+                    for key, item in value.items()
+                )
+
+            return str(value).strip()
+
+        def normalize_string_list(value: object) -> list[str]:
+            if value is None or value == "":
+                return []
+
+            if isinstance(value, list):
+                return [
+                    normalize_text(item)
+                    for item in value
+                    if normalize_text(item)
+                ]
+
+            normalized = normalize_text(value)
+            return [normalized] if normalized else []
+
+        def normalize_assessment(value: object) -> list[dict[str, str | None]]:
+            if value is None or value == "":
+                return []
+
+            if isinstance(value, str):
+                diagnosis = value.strip()
+                return [
+                    {
+                        "diagnosis": diagnosis,
+                        "icd10_code": None,
+                        "description": None,
+                    }
+                ] if diagnosis else []
+
+            if isinstance(value, dict):
+                if any(
+                    key in value
+                    for key in ("diagnosis", "icd10_code", "description")
+                ):
+                    return [
+                        {
+                            "diagnosis": normalize_text(
+                                value.get("diagnosis")
+                                or value.get("description")
+                                or "Clinical assessment"
+                            ),
+                            "icd10_code": (
+                                normalize_text(value.get("icd10_code")) or None
+                            ),
+                            "description": (
+                                normalize_text(value.get("description")) or None
+                            ),
+                        }
+                    ]
+
+                return [
+                    {
+                        "diagnosis": str(key).replace("_", " ").title(),
+                        "icd10_code": None,
+                        "description": normalize_text(item) or None,
+                    }
+                    for key, item in value.items()
+                ]
+
+            if isinstance(value, list):
+                assessments: list[dict[str, str | None]] = []
+
+                for item in value:
+                    if isinstance(item, dict):
+                        diagnosis = normalize_text(
+                            item.get("diagnosis")
+                            or item.get("condition")
+                            or item.get("name")
+                            or item.get("description")
+                            or "Clinical assessment"
+                        )
+
+                        assessments.append(
+                            {
+                                "diagnosis": diagnosis,
+                                "icd10_code": (
+                                    normalize_text(
+                                        item.get("icd10_code")
+                                        or item.get("icd_code")
+                                        or item.get("code")
+                                    )
+                                    or None
+                                ),
+                                "description": (
+                                    normalize_text(item.get("description"))
+                                    or None
+                                ),
+                            }
+                        )
+                    else:
+                        diagnosis = normalize_text(item)
+                        if diagnosis:
+                            assessments.append(
+                                {
+                                    "diagnosis": diagnosis,
+                                    "icd10_code": None,
+                                    "description": None,
+                                }
+                            )
+
+                return assessments
+
+            diagnosis = normalize_text(value)
+            return [
+                {
+                    "diagnosis": diagnosis,
+                    "icd10_code": None,
+                    "description": None,
+                }
+            ] if diagnosis else []
+
+        parsed["subjective"] = normalize_text(parsed.get("subjective"))
+        parsed["objective"] = normalize_text(parsed.get("objective"))
+        parsed["assessment"] = normalize_assessment(parsed.get("assessment"))
+        parsed["plan"] = normalize_text(parsed.get("plan"))
+        parsed["missing_information"] = normalize_string_list(
+            parsed.get("missing_information")
+        )
+        parsed["warnings"] = normalize_string_list(parsed.get("warnings"))
+
         return SoapNoteGenerationResult.model_validate(parsed)
 
     async def rewrite_soap_note_for_voice_command(

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import json
 from datetime import UTC, date, datetime, time
 
@@ -49,6 +50,7 @@ from app.services.note_generation_service import (
 )
 
 router = APIRouter(prefix="/encounters", tags=["encounters"])
+logger = logging.getLogger(__name__)
 
 
 def serialize_draft(draft: EncounterDraft | None, encounter_id: str) -> EncounterDraftResponse | None:
@@ -451,7 +453,9 @@ async def generate_note(
                     "message": str(exc),
                 },
             )
-        except Exception:
+        except Exception as exc:
+            logger.exception("SOAP note generation failed: %s", exc)
+
             yield format_sse_event(
                 "generation_error",
                 {
