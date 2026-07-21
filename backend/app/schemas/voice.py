@@ -7,6 +7,50 @@ from app.schemas.encounter import EncounterDraftResponse
 SoapSection = Literal["subjective", "objective", "assessment", "plan"]
 VoiceOperationType = Literal["append", "replace", "remove", "move", "shorten", "rewrite_note"]
 
+class VoiceCommandInterpretation(BaseModel):
+    intent: Literal[
+        "update_section",
+        "rewrite_section",
+        "remove_content",
+        "move_content",
+        "summarize",
+        "read_section",
+        "undo",
+        "save",
+        "clarify",
+        "no_change",
+    ]
+
+    target_sections: list[
+        Literal["subjective", "objective", "assessment", "plan"]
+    ] = Field(default_factory=list)
+
+    operation: Literal[
+        "append",
+        "replace",
+        "remove",
+        "rewrite",
+        "move",
+        "read",
+        "undo",
+        "save",
+        "none",
+    ] | None = None
+
+    content: str | None = None
+    source_section: Literal[
+        "subjective", "objective", "assessment", "plan"
+    ] | None = None
+
+    destination_section: Literal[
+        "subjective", "objective", "assessment", "plan"
+    ] | None = None
+
+    requires_clarification: bool = False
+    clarification_question: str | None = None
+
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
 
 class VoiceConversationTurn(BaseModel):
     role: Literal["provider", "assistant"]

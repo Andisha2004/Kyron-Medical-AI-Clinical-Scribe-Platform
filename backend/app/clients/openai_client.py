@@ -6,7 +6,10 @@ import httpx
 
 from app.core.config import get_settings
 from app.schemas.generation import AssessmentItem, SoapNoteGenerationResult
-from app.schemas.voice import VoiceRewriteResult
+from app.schemas.voice import (
+    VoiceCommandInterpretation,
+    VoiceRewriteResult,
+)
 
 
 class AiClientError(Exception):
@@ -220,6 +223,112 @@ class OllamaClinicalScribeClient:
 
     def __post_init__(self) -> None:
         self.settings = get_settings()
+
+    async def interpret_voice_command(
+        self,
+        *,
+        provider_command: str,
+        current_subjective: str,
+        current_objective: str,
+        current_assessment: str,
+        current_plan: str,
+    ) -> VoiceCommandInterpretation:
+        system_prompt = """
+You are a clinical voice-command interpreter.
+
+Your job is to understand what a healthcare provider wants to do to a SOAP
+note. Providers may use simple English, incomplete sentences, conversational
+phrasing, medical terminology, synonyms, or indirect requests.
+
+Do not rewrite the SOAP note in this step.
+
+Return only valid JSON.
+
+Supported intents:
+- update_section
+- rewrite_section
+- remove_content
+- move_content
+- summarize
+- read_section
+- undo
+- save
+- clarify
+- no_change
+
+SOAP section meanings:
+- subjective: symptoms, patient statements, history, complaints
+- objective: vital signs, exam findings, test results, observations
+- assessment: diagnoses, clinical impressions, ICD-10-related information
+- plan: treatment, medication, tests, referrals, follow-up and instructions
+
+Interpret conversational language by meaning, not exact wording.
+
+Examples:
+"Add that she has been coughing for three days"
+means append that information to subjective.
+
+"Put the blood pressure in objective"
+means update objective.
+
+"Take out the part about fever"
+means remove fever-related content from the most likely section.
+
+"Make the plan sound more professional"
+means rewrite the plan.
+
+"Actually move that to objective"
+means move the most recently referenced information to objective.
+
+"Change it"
+is ambiguous and requires clarification.
+
+Never guess when the requested section or content cannot be determined.
+Set requires_clarification to true and provide a short natural question.
+
+Do not invent patient facts.
+Do not interpret a request as permission to change unrelated sections.
+"""
+
+        user_prompt = f"""
+CURRENT SOAP NOTE
+
+Subjective:
+{current_subjective}
+
+Objective:
+{current_objective}
+
+Assessment:
+{current_assessment}
+
+Plan:
+{current_plan}
+
+PROVIDER COMMAND:
+{provider_command}
+
+Return JSON with exactly these fields:
+{{
+  "intent": "update_section | rewrite_section | remove_content | move_content | summarize | read_section | undo | save | clarify | no_change",
+  "target_sections": ["subjective | objective | assessment | plan"],
+  "operation": "append | replace | remove | rewrite | move | read | undo | save | none",
+  "content": "the information to add, remove, rewrite, move, or null",
+  "source_section": "subjective | objective | assessment | plan | null",
+  "destination_section": "subjective | objective | assessment | plan | null",
+  "requires_clarification": true or false,
+  "clarification_question": "question or null",
+  "confidence": 0.0 to 1.0
+}}
+"""
+
+        parsed = await self._generate_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            schema_name="voice_command_interpretation",
+        )
+
+        return VoiceCommandInterpretation.model_validate(parsed)
 
     async def generate_soap_note(
         self,
